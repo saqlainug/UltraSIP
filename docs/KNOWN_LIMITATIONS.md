@@ -10,9 +10,9 @@ Updated per release; honest by policy (never imply unimplemented features).
 - PJSIP 2.17 upstream has nine unpatched security advisories
   (THREAT_MODEL.md T3); acceptable only because nothing is network-exposed
   yet — must be resolved before Milestone 1 touches untrusted networks.
-- DTLS-SRTP is not possible with the current TLS backend (Apple
-  Network.framework); decision scheduled for Milestone 2
-  (docs/PJSIP_INTEGRATION.md).
+- DTLS-SRTP is **permanently out of scope by decision** (2026-07-13): it
+  would require the OpenSSL backend; MacSIP ships SDES-SRTP as its media
+  encryption (docs/PJSIP_INTEGRATION.md).
 - The PJSIP build is audio-only (video disabled) by design until
   Milestone 6.
 - CI has not yet run on GitHub infrastructure (workflow exists; the

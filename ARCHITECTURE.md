@@ -95,7 +95,7 @@ placeholder); the AppKit shell lands with Milestone 3 after approval gate 2
 | Sandbox | **No App Sandbox**; Hardened Runtime ON | Developer ID distribution doesn't require sandbox (§5); SIP needs unrestricted UDP/TCP in/out; entitlements limited to audio-input + camera |
 | Signing | Ad-hoc for dev/CI (`Config/Project.xcconfig`), Developer ID via `scripts/sign.sh` (user credentials) | macOS 15+ removed the Gatekeeper Control-click bypass — notarized Developer ID is the only viable distribution (§5) |
 | TLS backend | Apple Network.framework (`PJ_SSL_SOCK_IMP_APPLE`) | System trust store + no new dependency (§2). configure's "Darwin SSL" autodetect is the deprecated SecureTransport backend and fails on current SDKs |
-| DTLS-SRTP | Deferred to Milestone 2 decision | Requires the OpenSSL backend (confirmed, §2). Options: adopt OpenSSL via dependency-review, or ship SDES-SRTP and document the limitation |
+| DTLS-SRTP | **Out of scope (user decision 2026-07-13)** — SDES-SRTP is the supported media encryption | Requires the OpenSSL backend (confirmed, §2); user waived DTLS-SRTP parity rather than adding OpenSSL |
 | SIP stack version | pjproject 2.17 (current stable), not MicroSIP's 2.15.1 | 14+ security fixes; behavior parity ≠ stack-version parity (§2). Nine unpatched advisories tracked in THREAT_MODEL.md |
 | Video (M6) | VideoToolbox H.264 + libvpx VP8/VP9 planned | No bundled patent-encumbered codec code (§4) |
 | Launch at login | SMAppService.mainApp | The macOS 13+ API; predecessor deprecated (§5) |

@@ -33,7 +33,7 @@ functionality exists yet).
 | Digest auth; outbound proxy | Yes | Researched | — | — | — | — | — | — |
 | TLS system trust + hostname verify; visible insecure override | Yes | Researched | — | — | — | — | — | Apple TLS backend (RB §2) |
 | SRTP optional/mandatory | Yes | Researched | — | — | — | — | — | SDES works with current build |
-| DTLS-SRTP | Yes (since 3.22.3) | Blocked (decision M2) | — | — | — | — | — | Needs OpenSSL backend (RB §2) — M2 decision |
+| DTLS-SRTP | Yes (since 3.22.3) | Not applicable | — | — | — | — | — | User decision 2026-07-13: waived (needs OpenSSL backend, RB §2); SDES-SRTP is the supported encryption |
 | **3. Dialer** ||||||||
 | Number/URI parsing (tel, E.164, SIP/SIPS URI, IP, params) | Yes | Researched | — | — | — | — | — | — |
 | Dial plan language + prefix | Pattern lang: x, [..], <d:s>, ., \| | Researched | — | — | — | — | — | Documented in RB §1 |

@@ -48,8 +48,9 @@ backend is selected explicitly instead.
 
 Known consequence: **DTLS-SRTP is unavailable** with the Apple backend
 (requires OpenSSL; PJMEDIA_SRTP_HAS_DTLS force-disabled otherwise).
-SDES-SRTP works. Milestone 2 decides: adopt OpenSSL via dependency-review,
-or document DTLS-SRTP as a limitation.
+**DECIDED (user approval, 2026-07-13): MacSIP ships without DTLS-SRTP.**
+SDES-SRTP is the supported media encryption; no OpenSSL dependency will be
+added for this. Revisiting the decision is approval-gated.
 
 ## Configure flags (baseline)
 
