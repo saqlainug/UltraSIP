@@ -1,0 +1,25 @@
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcresult
+
+# Generated third-party artifacts — reproducible via scripts/build-pjsip.sh.
+# Never commit opaque prebuilt binaries (CLAUDE.md git workflow).
+ThirdParty/
+!ThirdParty/README.md
+
+# Secrets and local-only config
+.env
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+CLAUDE.local.md
+
+# Packaging output
+dist/
+
+# macOS
+.DS_Store
