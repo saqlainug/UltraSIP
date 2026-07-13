@@ -1,0 +1,69 @@
+# MacSIP CI — build + unit tests + lint + secret scan on macOS.
+#
+# Integration tests are deliberately ABSENT: GitHub-hosted macOS runners
+# cannot run Docker, so TestPBX-based tests run locally or on a self-hosted
+# runner and are tracked as environment-dependent (CLAUDE.md "CI reality").
+# Never fake them green here.
+#
+# Runner: needs Xcode 26+ (Swift 6.2+ build settings). If the `macos-26`
+# label is unavailable in this GitHub plan, switch to the newest macOS label
+# that ships Xcode 26.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build, test, lint (macOS)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tool versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Secret scan
+        run: scripts/secret-scan.sh
+
+      - name: Lint
+        run: scripts/lint.sh
+
+      - name: Cache PJSIP artifacts (keyed on the pin/flags in the script)
+        uses: actions/cache@v4
+        with:
+          path: ThirdParty
+          key: pjsip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-pjsip.sh') }}
+
+      - name: Bootstrap (tool checks + checksum-verified fetch)
+        run: scripts/bootstrap.sh
+
+      - name: Build PJSIP (reproducible universal static libs)
+        run: scripts/build-pjsip.sh
+
+      - name: Build Debug
+        run: scripts/build-debug.sh
+
+      - name: Unit tests
+        run: scripts/test.sh
+
+      - name: Build Release (universal, lipo-verified)
+        run: scripts/build-release.sh
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ThirdParty/pjsip/dist/**/*.log
+          if-no-files-found: ignore

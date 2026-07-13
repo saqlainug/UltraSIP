@@ -1,0 +1,22 @@
+# CLAUDE.local.md — machine-local notes (EXAMPLE)
+#
+# Copy to CLAUDE.local.md and fill in. CLAUDE.local.md is gitignored:
+# it may reference credential NAMES/locations but must NEVER contain a
+# secret value itself.
+
+## Signing (user-held; scripts ask before using)
+
+- Developer ID identity: Developer ID Application: YOUR NAME (TEAMID)
+- notarytool keychain profile name: macsip-notary
+  (created once with: xcrun notarytool store-credentials macsip-notary)
+
+## Local test environment
+
+- TestPBX host: 127.0.0.1 (docker compose in TestPBX/)
+- Test extensions in use on this machine: 101, 102, 103
+- Real-device manual tests available here: built-in mic/speakers, USB
+  headset <model>, Bluetooth headset <model>
+
+## Machine quirks
+
+- (e.g. corporate VPN blocks UDP 5060 — use TCP transport for local tests)

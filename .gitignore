@@ -6,7 +6,9 @@ build/
 
 # Generated third-party artifacts — reproducible via scripts/build-pjsip.sh.
 # Never commit opaque prebuilt binaries (CLAUDE.md git workflow).
-ThirdParty/
+# (ThirdParty/* not ThirdParty/ — a whole-dir exclude would make the
+# README negation below ineffective.)
+ThirdParty/*
 !ThirdParty/README.md
 
 # Secrets and local-only config
