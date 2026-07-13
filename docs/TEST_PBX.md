@@ -1,9 +1,14 @@
 # TestPBX
 
-Local, reproducible PBX for integration and media tests. **Status: design
-only — the compose file, PBX config, and scenarios arrive with Milestone 1**
-(first registration/call slice needs them). This page fixes the plan so M1
-implements against it.
+Local, reproducible PBX for integration and media tests.
+
+**Status 2026-07-13: compose file + Asterisk configs are WRITTEN
+(TestPBX/) but have NEVER RUN — Docker is not installed on the primary dev
+machine.** First run: install Docker Desktop/OrbStack, approve the
+`andrius/asterisk` image download (CLAUDE.md), `cd TestPBX && docker
+compose up -d`, then `scripts/integration-test.sh`. SIPp scenarios still
+pending. Call-path verification meanwhile uses the pjsua local loop
+(integration-test.sh tier 1).
 
 ## Planned layout
 

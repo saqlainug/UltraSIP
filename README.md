@@ -7,27 +7,31 @@ Intel), Swift + Objective-C++, AppKit/SwiftUI.
 
 ## ⚠️ Implementation status — read this first
 
-**This project is at Milestone 0 (foundation). It cannot make or receive
-calls yet.** Nothing here is a working phone; the app target builds and
-shows an honest placeholder window only.
+**Milestone 1 core is working: MacSIP makes and receives real SIP calls
+with real RTP audio** — verified by automated integration tests against a
+real SIP peer (pjsua) over localhost, with RTP packet counters asserted in
+both directions and DTMF delivery confirmed peer-side.
 
-What actually exists today (verified 2026-07-13):
+What actually works today (verified 2026-07-13):
 
-- ✅ Reproducible, checksum-pinned PJSIP 2.17 build → universal static lib
-  (`scripts/build-pjsip.sh`)
-- ✅ Xcode project (macOS-only, Hardened Runtime, identity via
-  `Config/Project.xcconfig`), unit-test target, shared scheme
-- ✅ First Domain slice: SIP status-code → user-facing result mapping,
-  unit-tested
-- ✅ Research baseline with sources (`docs/RESEARCH_BASELINE.md`),
-  licensing records, threat model, architecture, parity matrix
-- ✅ CI (build + unit tests + lint + secret scan), canonical scripts
-- ❌ SIP registration, calling, media, UI beyond a placeholder — all
-  tracked honestly in [PARITY_MATRIX.md](PARITY_MATRIX.md)
+- ✅ Outgoing + incoming audio calls (INVITE/200/ACK over UDP), answer,
+  reject-as-busy (peer sees 486), hangup — integration-tested
+- ✅ Bidirectional RTP media (G.711 via PJSIP conference bridge),
+  hold/resume via re-INVITE, RFC 4733 DTMF — integration-tested
+- ✅ Keychain-only password storage (round-trip tested); SQLite persistence
+  with versioned, tested migrations (no secret columns, enforced by test)
+- ✅ Functional compact UI: account form, dialer, in-call controls with
+  DTMF keypad, incoming-call banner, history, diagnostics
+- ✅ Reproducible, checksum-pinned PJSIP 2.17 universal build; CI; full
+  governance docs (threat model, licensing, research baseline)
+- ⚠️ **Registration against a real PBX is implemented but UNVERIFIED** —
+  the TestPBX needs Docker, absent on the dev machine
+  ([docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md))
+- ❌ TLS/SRTP, multiple accounts, transfers, conference, presence,
+  messaging, video — later milestones, tracked in
+  [PARITY_MATRIX.md](PARITY_MATRIX.md)
 
-Milestone plan: docs/SPEC.md ("Milestones"). Next: Milestone 1 — a real
-audio-call vertical slice (register → call → bidirectional audio) against
-the local test PBX.
+Milestone plan: docs/SPEC.md ("Milestones").
 
 ## Building
 

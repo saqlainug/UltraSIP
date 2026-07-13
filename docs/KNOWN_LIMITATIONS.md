@@ -2,11 +2,21 @@
 
 Updated per release; honest by policy (never imply unimplemented features).
 
-## As of Milestone 0 (2026-07-13)
+## As of Milestone 1 core (2026-07-13)
 
-- **No SIP functionality exists yet.** The app builds and shows a status
-  placeholder; it cannot register, call, or receive. See PARITY_MATRIX.md
-  for the complete feature-by-feature status.
+- **Registration against a real PBX is unverified.** Code is implemented
+  (UDP + digest credentials via Keychain), but Docker is absent on the dev
+  machine so the TestPBX has never run. Calls ARE verified against a real
+  local SIP peer (pjsua): outgoing/incoming with bidirectional RTP, DTMF
+  delivery, hold/resume, reject-busy (docs/INTEROP_TEST_MATRIX.md).
+- Single account only; UDP transport only (TCP/TLS/SRTP = Milestone 2).
+- Mic mute is implemented but has no media-level automated assertion yet;
+  remote-output mute not implemented.
+- DTMF is RFC 4733 only (INFO/in-band + preference setting pending).
+- UI is functional but deliberately unpolished pre-gate-2 (in-window
+  incoming banner, no floating panel/menu bar/dialpad grid yet).
+- No ringtone/sound events yet; no dial plan/prefix transformation yet.
+- History: M1 subset (no filters/search/export yet).
 - PJSIP 2.17 upstream has nine unpatched security advisories
   (THREAT_MODEL.md T3); acceptable only because nothing is network-exposed
   yet — must be resolved before Milestone 1 touches untrusted networks.

@@ -10,8 +10,14 @@ RESEARCH_BASELINE.md; implementation has not begun. A feature may only
 graduate with evidence (test run, command output) recorded in the change
 that graduates it.
 
-Last full review: **2026-07-13** (Milestone 0 — foundation only; no SIP
-functionality exists yet).
+Last full review: **2026-07-13** (Milestone 1 core: real calls with
+verified media work against a local pjsua peer; registration against a
+real PBX remains environment-blocked — Docker absent on the dev machine).
+
+"Integration tested (local loop)" = verified against a real pjsua SIP peer
+over localhost UDP with RTP packet-counter and peer-log assertions
+(scripts/integration-test.sh tier 1). PBX-dependent behavior still needs
+the TestPBX tier.
 
 | Feature | MicroSIP reference | Status | Source files | Unit | Integration | Manual | PBX dep | Limitations / notes |
 |---|---|---|---|---|---|---|---|---|
@@ -23,10 +29,10 @@ functionality exists yet).
 | **1. SIP accounts** ||||||||
 | Add/edit/delete/enable accounts, full field set | Settings → Accounts | Researched | — | — | — | — | — | Field list SPEC §1 |
 | Multiple accounts, one active, switch w/o restart | Yes (one active at a time) | Researched | — | — | — | — | — | — |
-| Local account (serverless IP calls) | "Local Account" | Researched | — | — | — | — | — | — |
-| Registration lifecycle, status, refresh, failure detail | Yes | Researched | — | — | — | — | — | M1 slice |
+| Local account (serverless IP calls) | "Local Account" | Integration tested (local loop) 2026-07-13 | Domain/Accounts/SIPAccountConfig.swift (registrationEnabled) | ✔ | Local loop ✔ (used by all tier-1 tests) | — | — | No dedicated UI toggle yet |
+| Registration lifecycle, status, refresh, failure detail | Yes | Implemented 2026-07-13 | SIPCore/Bridge/MSPEngine.mm, Domain/Accounts/RegistrationState.swift | State machine ✔ | **Blocked: needs TestPBX (no Docker on dev machine)** | — | Registrar | UDP only; UI shows status/failure detail |
 | Network / sleep-wake re-registration | Yes | Researched | — | — | — | — | — | NWPathMonitor + NSWorkspace (RB §5) |
-| Keychain password storage | ini stores obfuscated pw | Not started | — | — | — | — | — | MacSIP: Keychain-only (stronger than parity) |
+| Keychain password storage | ini stores obfuscated pw | Unit tested 2026-07-13 | Security/KeychainStore.swift | Round-trip vs real Keychain ✔ | n/a | — | — | DB stores refs only; no-secret-columns enforced by test |
 | Account import/export | Export/import since 3.22.5 | Researched | — | — | — | — | — | No plaintext secrets by default |
 | **2. Transport & SIP security** ||||||||
 | UDP / TCP / TLS / UDP+TCP; IPv6 | Yes (UDP+TCP combined mode) | Researched | — | — | — | — | — | — |
@@ -40,17 +46,17 @@ functionality exists yet).
 | Redial, paste, keyboard entry, suggestions | Yes | Researched | — | — | — | — | — | — |
 | Post-connect DTMF (comma pauses) | Yes | Researched | — | — | — | — | — | — |
 | **4. Calls** ||||||||
-| Outgoing/incoming audio calls, answer/reject/busy/cancel | Yes | Researched | — | — | — | — | — | M1 slice |
+| Outgoing/incoming audio calls, answer/reject/busy/cancel | Yes | Integration tested (local loop) 2026-07-13 | SIPCore/, App/AppModel.swift, Features/ | State machines ✔ | Outgoing+incoming+reject-486 ✔ vs real pjsua peer; RTP both ways asserted | — | — | Cancel-outgoing covered by hangup path; PBX scenarios pending |
 | Early media, provisional responses, progress tones | Yes | Researched | — | — | — | — | — | — |
-| Hold/resume/swap; auto-hold on switch | Yes (Call Manager) | Researched | — | — | — | — | — | — |
-| Mute (mic + remote output) | Yes | Researched | — | — | — | — | — | — |
+| Hold/resume/swap; auto-hold on switch | Yes (Call Manager) | Hold/resume: Integration tested (local loop) 2026-07-13; swap/auto-hold: Not started (M4) | SIPCore/Bridge/MSPEngine.mm | ✔ | re-INVITE hold→local-hold→resume ✔ | — | — | — |
+| Mute (mic + remote output) | Yes | Mic mute: Implemented 2026-07-13; remote-output mute: Not started | SIPCore/Bridge/MSPEngine.mm (conf-bridge disconnect) | — | No media-level assert yet (silence vs packets) | Pending | — | Media-level mute verification queued for TestPBX tier |
 | Multiple calls, max-calls cap + auto-reject | maxConcurrentCalls (hidden ini) | Researched | — | — | — | — | — | PJSUA_MAX_CALLS default 4 → raise |
 | Call waiting | Yes | Researched | — | — | — | — | — | — |
 | P-Asserted-Identity / RPID / Diversion display | PAI outgoing since 3.22.5 | Researched | — | — | — | — | — | Untrusted-identity display rules (T13) |
 | SIP code → user text (404 ≠ generic) | Yes | Unit tested | Domain/Calls/SIPStatusMapping.swift | ✔ | — | — | — | Wired to real calls at M1 |
 | Auto hang-up timer | autoHangUpTime (hidden ini) | Researched | — | — | — | — | — | — |
 | **5. DTMF** ||||||||
-| RFC 4733, SIP INFO, in-band, auto + preference | auto/RFC2833/in-band/INFO | Researched | — | — | — | — | — | Sensitive: log suppression (T2) |
+| RFC 4733, SIP INFO, in-band, auto + preference | auto/RFC2833/in-band/INFO | RFC4733: Integration tested (local loop) 2026-07-13; INFO/in-band/preference: Not started | SIPCore/Bridge/MSPEngine.mm | Redaction ✔ | Peer-side digit receipt asserted ✔ | — | — | Digits never logged (SecurityTests) |
 | **6. Transfer** ||||||||
 | Blind transfer (REFER); attended; consultation; failure recovery | Yes (Call Manager) | Researched | — | — | — | — | — | M4 |
 | Feature-code fallback (configurable) | Feature Codes settings | Researched | — | — | — | — | — | — |
@@ -88,7 +94,7 @@ functionality exists yet).
 | **17. External directory** ||||||||
 | HTTPS JSON/XML directory (+ Cisco/Yealink formats), sequence param, backoff | Yes incl. presence-only feeds | Researched | — | — | — | — | — | XXE-hardened parsing (T6) |
 | **18. Call history** ||||||||
-| Full outcome/duration/identity records, filters, export | Yes; log DB since 3.22.5 undocumented | Researched | — | — | — | — | — | Import of MicroSIP 3.22.5+ log DB not feasible (format unpublished) |
+| Full outcome/duration/identity records, filters, export | Yes; log DB since 3.22.5 undocumented | In progress — M1 subset Unit tested 2026-07-13 (direction/outcome/timestamps/talk-duration, persisted, no fake zero durations) | Persistence/, Domain/History/ | Repo round-trip ✔ | — | — | — | Filters/export later; MicroSIP 3.22.5+ log DB import not feasible (format unpublished) |
 | **19. Shortcuts** ||||||||
 | Programmable shortcuts (BLF/DTMF/transfer/toggle/…) | 8 shortcuts; 3 combined types since 3.22.5 | Researched | — | — | — | — | — | Executable actions: argv-only, off by default (T8) |
 | **20. Automation & local control** ||||||||
