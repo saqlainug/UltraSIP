@@ -27,6 +27,20 @@ nonisolated enum DisconnectReason: Equatable, Sendable {
     case remoteHangup
     case failed(code: Int?, reason: String)
 
+    /// Maps a final SIP code to the user-facing reason
+    /// (docs/SIP_STATE_MACHINES.md event tables).
+    static func from(sipCode: Int, reasonText: String, wasConnected: Bool) -> DisconnectReason {
+        if wasConnected { return .normal }
+        switch sipCode {
+        case 487: return .cancelled
+        case 486, 600: return .busy
+        case 603: return .rejected
+        case 200: return .normal
+        case let code where code >= 300: return .failed(code: code, reason: reasonText)
+        default: return .failed(code: sipCode == 0 ? nil : sipCode, reason: reasonText)
+        }
+    }
+
     /// User-facing outcome (SPEC §4: raw code preserved in diagnostics only).
     var userFacingDescription: String {
         switch self {

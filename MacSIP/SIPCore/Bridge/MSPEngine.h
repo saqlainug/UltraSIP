@@ -1,0 +1,70 @@
+//
+// MSPEngine — the single owner of the PJSIP runtime.
+//
+// Ownership & threading contract (ARCHITECTURE.md, CLAUDE.md):
+// - One dedicated engine thread executes ALL PJSIP calls. Public methods
+//   are asynchronous and hop onto it; none block the caller.
+// - Delegate events are emitted on a private serial queue, already
+//   converted to immutable MSP* values; the Swift side republishes on the
+//   main actor. Never call back into MSPEngine synchronously from a
+//   delegate callback.
+// - Teardown order inside stop: calls → account → transports/endpoint
+//   (libDestroy). After stop completes the engine can be started again.
+//
+
+#import <Foundation/Foundation.h>
+
+#import "MSPTypes.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+extern NSErrorDomain const MSPErrorDomain;
+
+@protocol MSPEngineDelegate <NSObject>
+- (void)sipEngineRegistrationChanged:(MSPRegistrationEvent *)event;
+- (void)sipEngineCallChanged:(MSPCallEvent *)event;
+- (void)sipEngineIncomingCall:(MSPCallEvent *)event;
+@end
+
+@interface MSPEngine : NSObject
+
+@property(nonatomic, weak, nullable) id<MSPEngineDelegate> delegate;
+
+/// Starts the PJSIP runtime (endpoint + UDP transport) on the engine
+/// thread. Idempotent: starting a started engine reports no error.
+- (void)startWithUserAgent:(NSString *)userAgent
+                completion:(void (^)(NSError *_Nullable error))completion;
+
+/// Stops everything in the documented teardown order. Idempotent.
+- (void)stopWithCompletion:(void (^)(void))completion;
+
+/// Creates or replaces the single SIP account and begins registration.
+- (void)configureAccount:(MSPAccountConfig *)config
+              completion:(void (^)(NSError *_Nullable error))completion;
+
+/// Unregisters and removes the account (no-op when absent).
+- (void)removeAccountWithCompletion:(void (^)(void))completion;
+
+/// Manual re-registration (no-op when no account).
+- (void)refreshRegistration;
+
+/// Places an outgoing call. On success the callback receives the stable
+/// call id later used in MSPCallEvent.
+- (void)makeCallTo:(NSString *)uri
+        completion:(void (^)(NSError *_Nullable error, NSInteger callId))completion;
+
+- (void)answerCall:(NSInteger)callId;
+- (void)rejectCall:(NSInteger)callId busy:(BOOL)busy;
+- (void)hangupCall:(NSInteger)callId;
+- (void)setCall:(NSInteger)callId held:(BOOL)held;
+- (void)setCall:(NSInteger)callId muted:(BOOL)muted;
+/// RFC 4733 digits (0-9, *, #, A-D).
+- (void)sendDTMF:(NSString *)digits toCall:(NSInteger)callId;
+
+/// Sanitized runtime diagnostics (versions, transport, codecs, account
+/// state). Never contains credentials.
+- (void)diagnosticsWithCompletion:(void (^)(NSString *info))completion;
+
+@end
+
+NS_ASSUME_NONNULL_END
