@@ -10,9 +10,10 @@ RESEARCH_BASELINE.md; implementation has not begun. A feature may only
 graduate with evidence (test run, command output) recorded in the change
 that graduates it.
 
-Last full review: **2026-07-13** (Milestone 1 core: real calls with
-verified media work against a local pjsua peer; registration against a
-real PBX remains environment-blocked — Docker absent on the dev machine).
+Last full review: **2026-07-14** (Milestone 1 verified end-to-end:
+registration + digest auth + failure detail against the Asterisk TestPBX,
+calls with PBX-relayed bidirectional RTP, and the pjsua local loop — all
+automated in scripts/integration-test.sh).
 
 "Integration tested (local loop)" = verified against a real pjsua SIP peer
 over localhost UDP with RTP packet-counter and peer-log assertions
@@ -30,7 +31,7 @@ the TestPBX tier.
 | Add/edit/delete/enable accounts, full field set | Settings → Accounts | Researched | — | — | — | — | — | Field list SPEC §1 |
 | Multiple accounts, one active, switch w/o restart | Yes (one active at a time) | Researched | — | — | — | — | — | — |
 | Local account (serverless IP calls) | "Local Account" | Integration tested (local loop) 2026-07-13 | Domain/Accounts/SIPAccountConfig.swift (registrationEnabled) | ✔ | Local loop ✔ (used by all tier-1 tests) | — | — | No dedicated UI toggle yet |
-| Registration lifecycle, status, refresh, failure detail | Yes | Implemented 2026-07-13 | SIPCore/Bridge/MSPEngine.mm, Domain/Accounts/RegistrationState.swift | State machine ✔ | **Blocked: needs TestPBX (no Docker on dev machine)** | — | Registrar | UDP only; UI shows status/failure detail |
+| Registration lifecycle, status, refresh, failure detail | Yes | **Integration tested 2026-07-14** (Asterisk TestPBX) | SIPCore/Bridge/MSPEngine.mm, Domain/Accounts/RegistrationState.swift | State machine ✔ | REGISTER+digest ✔ with expiry; wrong password → 401 "Authentication required" ✔ | — | Registrar | UDP only (TCP/TLS = M2) |
 | Network / sleep-wake re-registration | Yes | Researched | — | — | — | — | — | NWPathMonitor + NSWorkspace (RB §5) |
 | Keychain password storage | ini stores obfuscated pw | Unit tested 2026-07-13 | Security/KeychainStore.swift | Round-trip vs real Keychain ✔ | n/a | — | — | DB stores refs only; no-secret-columns enforced by test |
 | Account import/export | Export/import since 3.22.5 | Researched | — | — | — | — | — | No plaintext secrets by default |
@@ -46,7 +47,7 @@ the TestPBX tier.
 | Redial, paste, keyboard entry, suggestions | Yes | Researched | — | — | — | — | — | — |
 | Post-connect DTMF (comma pauses) | Yes | Researched | — | — | — | — | — | — |
 | **4. Calls** ||||||||
-| Outgoing/incoming audio calls, answer/reject/busy/cancel | Yes | Integration tested (local loop) 2026-07-13 | SIPCore/, App/AppModel.swift, Features/ | State machines ✔ | Outgoing+incoming+reject-486 ✔ vs real pjsua peer; RTP both ways asserted | — | — | Cancel-outgoing covered by hangup path; PBX scenarios pending |
+| Outgoing/incoming audio calls, answer/reject/busy/cancel | Yes | **Integration tested 2026-07-14** (pjsua loop + Asterisk PBX) | SIPCore/, App/AppModel.swift, Features/ | State machines ✔ | Peer loop: out/in/reject-486 + RTP both ways ✔. PBX: registered call to echo app, digest-challenged INVITE, RTP relayed both ways ✔; 486→Busy, 404→"Number not found" ✔ | — | — | Cancel-outgoing covered by hangup path |
 | Early media, provisional responses, progress tones | Yes | Researched | — | — | — | — | — | — |
 | Hold/resume/swap; auto-hold on switch | Yes (Call Manager) | Hold/resume: Integration tested (local loop) 2026-07-13; swap/auto-hold: Not started (M4) | SIPCore/Bridge/MSPEngine.mm | ✔ | re-INVITE hold→local-hold→resume ✔ | — | — | — |
 | Mute (mic + remote output) | Yes | Mic mute: Implemented 2026-07-13; remote-output mute: Not started | SIPCore/Bridge/MSPEngine.mm (conf-bridge disconnect) | — | No media-level assert yet (silence vs packets) | Pending | — | Media-level mute verification queued for TestPBX tier |
@@ -72,7 +73,7 @@ the TestPBX tier.
 | Custom ringtone, sound events, audio test | Yes | Researched | — | — | — | — | — | — |
 | Bluetooth/USB/HID headset buttons | Jabra/Plantronics HID | Researched | — | — | — | — | — | Manual-test only items |
 | **10. Codecs** ||||||||
-| Enable/disable/priority UI; negotiated display | Yes; default-enabled = PCMA+PCMU only | Researched | — | — | — | — | — | Build ships PCMU/PCMA/G.722/GSM/iLBC/Speex |
+| Enable/disable/priority UI; negotiated display | Yes; default-enabled = PCMA+PCMU only | Defaults: Implemented 2026-07-14 (PCMU/PCMA/G722 enabled, rest disabled — MicroSIP parity); UI: Not started | SIPCore/Bridge/MSPEngine.mm | — | Exercised by all call tests | — | — | Build ships GSM/iLBC/Speex compiled but priority-0 |
 | Opus | Available in MicroSIP | Not started | — | — | — | — | — | Approved: --with-opus via dependency-review |
 | G.729 (bcg729) | Available | Not started | — | — | — | — | — | Approved for later (GPLv3, patents expired) |
 | AMR/AMR-WB | Available | Blocked | — | — | — | — | — | Patent terms unconfirmed — do not bundle |

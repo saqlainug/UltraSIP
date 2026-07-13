@@ -2,13 +2,13 @@
 
 Updated per release; honest by policy (never imply unimplemented features).
 
-## As of Milestone 1 core (2026-07-13)
+## As of Milestone 1 (2026-07-14)
 
-- **Registration against a real PBX is unverified.** Code is implemented
-  (UDP + digest credentials via Keychain), but Docker is absent on the dev
-  machine so the TestPBX has never run. Calls ARE verified against a real
-  local SIP peer (pjsua): outgoing/incoming with bidirectional RTP, DTMF
-  delivery, hold/resume, reject-busy (docs/INTEROP_TEST_MATRIX.md).
+- Registration, auth-failure detail, and PBX-routed calls with
+  bidirectional media are verified against the Asterisk TestPBX
+  (docs/INTEROP_TEST_MATRIX.md). Gaps that remain in the matrix:
+  PBX→MacSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
+  scenario coverage.
 - Single account only; UDP transport only (TCP/TLS/SRTP = Milestone 2).
 - Mic mute is implemented but has no media-level automated assertion yet;
   remote-output mute not implemented.

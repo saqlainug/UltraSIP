@@ -49,18 +49,25 @@ else
 fi
 
 # ---- Tier 2: TestPBX --------------------------------------------------------
-if [[ -f "${REPO_ROOT}/TestPBX/docker-compose.yml" ]]; then
-  if command -v docker >/dev/null 2>&1; then
-    if docker compose -f "${REPO_ROOT}/TestPBX/docker-compose.yml" ps --status running 2>/dev/null | grep -q asterisk; then
-      warn "TestPBX is running but the PBX test suite is not implemented yet (registration tier pending). Not counting as passed."
-    else
-      warn "TestPBX not running. Start it: (cd TestPBX && docker compose up -d). Skipping tier 2."
-    fi
-  else
-    warn "Docker not installed on this machine — TestPBX tier SKIPPED (environment-dependent, documented in docs/KNOWN_LIMITATIONS.md)."
+if command -v docker >/dev/null 2>&1 \
+  && docker compose -f "${REPO_ROOT}/TestPBX/docker-compose.yml" ps --status running 2>/dev/null | grep -q asterisk; then
+  log "Tier 2: TestPBX integration tests (registration, auth, PBX-routed media)"
+  cd "${REPO_ROOT}"
+  set +e
+  OUTPUT="$(TEST_RUNNER_MACSIP_PBX=1 \
+    xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug \
+    -only-testing:MacSIPTests/PBXIntegrationTests test 2>&1)"
+  STATUS=$?
+  set -e
+  echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true
+  if [[ ${STATUS} -ne 0 ]]; then
+    echo "${OUTPUT}" | tail -50
+    die "TestPBX integration tests FAILED (exit ${STATUS})."
   fi
+  RAN_ANY=1
+  log "Tier 2 passed."
 else
-  warn "No TestPBX/docker-compose.yml yet. Skipping tier 2."
+  warn "TestPBX not running (need Docker + 'cd TestPBX && docker compose up -d'). Skipping tier 2."
 fi
 
 if [[ "${RAN_ANY}" -eq 0 ]]; then

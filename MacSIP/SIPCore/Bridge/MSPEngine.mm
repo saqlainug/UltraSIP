@@ -319,6 +319,22 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             if (useNullAudio) {
                 self->_core.endpoint->audDevManager().setNullDev();
             }
+            // Default codec policy = MicroSIP-parity (PCMU/PCMA enabled;
+            // G722 kept for wideband). Everything else disabled until the
+            // codec-settings milestone. Side benefit: compact SDP keeps
+            // INVITEs under the RFC 3261 UDP size threshold — oversized
+            // SIP datagrams do not survive some NAT/proxy paths.
+            for (const auto &codec : self->_core.endpoint->codecEnum2()) {
+                unsigned priority = 0;
+                if (codec.codecId.rfind("PCMU/", 0) == 0) {
+                    priority = 200;
+                } else if (codec.codecId.rfind("PCMA/", 0) == 0) {
+                    priority = 190;
+                } else if (codec.codecId.rfind("G722/", 0) == 0) {
+                    priority = 180;
+                }
+                self->_core.endpoint->codecSetPriority(codec.codecId, (pj_uint8_t)priority);
+            }
             self->_core.started = true;
             dispatch_async(self->_delegateQueue, ^{ completion(nil); });
         } catch (const pj::Error &e) {

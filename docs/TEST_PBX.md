@@ -2,13 +2,14 @@
 
 Local, reproducible PBX for integration and media tests.
 
-**Status 2026-07-13: compose file + Asterisk configs are WRITTEN
-(TestPBX/) but have NEVER RUN — Docker is not installed on the primary dev
-machine.** First run: install Docker Desktop/OrbStack, approve the
-`andrius/asterisk` image download (CLAUDE.md), `cd TestPBX && docker
-compose up -d`, then `scripts/integration-test.sh`. SIPp scenarios still
-pending. Call-path verification meanwhile uses the pjsua local loop
-(integration-test.sh tier 1).
+**Status 2026-07-14: OPERATIONAL.** Runs via `cd TestPBX && docker compose
+up -d`; exercised by `scripts/integration-test.sh` tier 2 (registration,
+auth failure, echo-media call, 486/404 outcome generators — all passing).
+SIPp scenarios still pending. Container specifics: RTP range pinned to the
+compose port mapping (rtp.conf), and the UDP transport advertises
+`external_media_address=127.0.0.1` because the PBX lives behind Docker's
+NAT. Docker's UDP proxy drops oversized datagrams — keep SIP requests
+under the RFC 3261 UDP threshold (MacSIP's compact default SDP does).
 
 ## Planned layout
 

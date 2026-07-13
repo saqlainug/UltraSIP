@@ -24,9 +24,10 @@ What actually works today (verified 2026-07-13):
   DTMF keypad, incoming-call banner, history, diagnostics
 - ✅ Reproducible, checksum-pinned PJSIP 2.17 universal build; CI; full
   governance docs (threat model, licensing, research baseline)
-- ⚠️ **Registration against a real PBX is implemented but UNVERIFIED** —
-  the TestPBX needs Docker, absent on the dev machine
-  ([docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md))
+- ✅ Registration with digest auth against a real PBX (Asterisk TestPBX),
+  including failure detail (401 → "Authentication required"), plus
+  PBX-routed calls with relayed RTP verified both ways and correct
+  outcome mapping (486 → "Busy", 404 → "Number not found")
 - ❌ TLS/SRTP, multiple accounts, transfers, conference, presence,
   messaging, video — later milestones, tracked in
   [PARITY_MATRIX.md](PARITY_MATRIX.md)
