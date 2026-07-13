@@ -110,6 +110,12 @@ final class SIPEngine: NSObject {
         bridge.refreshRegistration()
     }
 
+    /// Network-path / wake recovery (docs/SIP_STATE_MACHINES.md
+    /// registration triggers). Idempotent.
+    func handleNetworkChanged() {
+        bridge.handleNetworkChanged()
+    }
+
     // MARK: Calls
 
     func makeCall(to uri: String) async throws -> CallID {

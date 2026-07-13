@@ -24,6 +24,9 @@ final class AppModel: ObservableObject {
     private let engine: SIPEngine
     private let secrets: any SecretStore
     private var persistence: PersistenceStack?
+    private let networkMonitor = NetworkPathMonitor()
+    private let sleepWakeMonitor = SleepWakeMonitor()
+    private let recoveryDebouncer = Debouncer(interval: 2.0)
     private static let log = Logger(subsystem: "com.example.macsip", category: "AppModel")
 
     var incomingCalls: [CallSnapshot] {
@@ -79,6 +82,27 @@ final class AppModel: ObservableObject {
                 lastError = error.localizedDescription
             }
         }
+        startRecoveryMonitors()
+    }
+
+    /// Network-change + wake recovery (SPEC M2): debounced path events and
+    /// wake notifications hand recovery to PJSIP's IP-change handling.
+    private func startRecoveryMonitors() {
+        networkMonitor.onChange = { [weak self] in
+            guard let self else { return }
+            self.recoveryDebouncer.trigger { [weak self] in
+                guard let self, self.engineStatus == .running, self.account != nil else { return }
+                Self.log.info("Network path changed — recovering registration/calls")
+                self.engine.handleNetworkChanged()
+            }
+        }
+        sleepWakeMonitor.onWake = { [weak self] in
+            guard let self, self.engineStatus == .running, self.account != nil else { return }
+            Self.log.info("System woke — recovering registration/calls")
+            self.engine.handleNetworkChanged()
+        }
+        networkMonitor.start()
+        sleepWakeMonitor.start()
     }
 
     // MARK: Account

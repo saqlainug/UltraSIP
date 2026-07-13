@@ -492,6 +492,18 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
     }];
 }
 
+- (void)handleNetworkChanged {
+    [self onEngine:^{
+        if (!self->_core.started) return;
+        try {
+            pj::IpChangeParam param;
+            self->_core.endpoint->handleIpChange(param);
+        } catch (const pj::Error &e) {
+            PJ_LOG(2, ("MSPEngine", "handleIpChange failed: %s", e.reason.c_str()));
+        }
+    }];
+}
+
 #pragma mark Calls
 
 - (void)makeCallTo:(NSString *)uri

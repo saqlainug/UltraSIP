@@ -53,6 +53,11 @@ extern NSErrorDomain const MSPErrorDomain;
 /// Manual re-registration (no-op when no account).
 - (void)refreshRegistration;
 
+/// Network-path or wake recovery: restarts transports, re-registers, and
+/// re-INVITEs active calls via PJSIP's IP-change handling. Safe to call
+/// repeatedly; no-op when stopped.
+- (void)handleNetworkChanged;
+
 /// Places an outgoing call. On success the callback receives the stable
 /// call id later used in MSPCallEvent.
 - (void)makeCallTo:(NSString *)uri
