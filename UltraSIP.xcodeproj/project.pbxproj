@@ -10,9 +10,33 @@
 		8B22D95A3004FD3A00FD7705 /* UltraSIP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = UltraSIP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8B22D96B3005000D00FD7705 /* Exceptions for "UltraSIP" folder in "UltraSIP" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CLAUDE.md,
+			);
+			target = 8B22D9593004FD3A00FD7705 /* UltraSIP */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		8B22D96C3005000D00FD7705 /* Exceptions for "UltraSIP" folder in "Compile Sources" phase from "UltraSIP" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 8B22D9563004FD3A00FD7705 /* Sources */;
+			membershipExceptions = (
+				CLAUDE.md,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8B22D95C3004FD3A00FD7705 /* UltraSIP */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8B22D96B3005000D00FD7705 /* Exceptions for "UltraSIP" folder in "UltraSIP" target */,
+				8B22D96C3005000D00FD7705 /* Exceptions for "UltraSIP" folder in "Compile Sources" phase from "UltraSIP" target */,
+			);
 			path = UltraSIP;
 			sourceTree = "<group>";
 		};
