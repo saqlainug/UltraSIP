@@ -23,6 +23,7 @@ final class AppModel: ObservableObject {
 
     private let engine: SIPEngine
     private let secrets: any SecretStore
+    private var persistence: PersistenceStack?
     private static let log = Logger(subsystem: "com.example.macsip", category: "AppModel")
 
     var incomingCalls: [CallSnapshot] {
@@ -35,10 +36,23 @@ final class AppModel: ObservableObject {
             .sorted { $0.startedAt < $1.startedAt }
     }
 
-    init(engine: SIPEngine = SIPEngine(), secrets: any SecretStore = KeychainStore()) {
+    init(
+        engine: SIPEngine = SIPEngine(), secrets: any SecretStore = KeychainStore(),
+        persistence: PersistenceStack? = nil
+    ) {
         self.engine = engine
         self.secrets = secrets
         engine.onEvent = { [weak self] event in self?.handle(event) }
+        do {
+            let stack = try persistence ?? PersistenceStack.open()
+            self.persistence = stack
+            account = try stack.accounts.loadAll().first
+            history = try stack.history.recent(limit: 50)
+        } catch {
+            // App remains usable without persistence; state is session-only.
+            lastError = "Storage unavailable: \(error.localizedDescription)"
+            Self.log.error("Persistence open failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: Engine lifecycle
@@ -54,6 +68,16 @@ final class AppModel: ObservableObject {
             engineStatus = .running
         } catch {
             engineStatus = .failed(error.localizedDescription)
+            return
+        }
+        // Re-register the persisted account from the previous session.
+        if let account {
+            do {
+                let password = try secrets.password(forRef: account.keychainPasswordRef) ?? ""
+                try await engine.configureAccount(account, password: password)
+            } catch {
+                lastError = error.localizedDescription
+            }
         }
     }
 
@@ -78,6 +102,9 @@ final class AppModel: ObservableObject {
             // Fetched transiently at configuration time only; not retained.
             let password = try secrets.password(forRef: config.keychainPasswordRef) ?? ""
             try await engine.configureAccount(config, password: password)
+            if let persistence {
+                try persistence.accounts.save(config)
+            }
             account = config
             showAccountForm = false
             lastError = nil
@@ -191,7 +218,15 @@ final class AppModel: ObservableObject {
         }
         if case .disconnected = proposed {
             snapshot.endedAt = Date()
-            history.insert(CallHistoryEntry.from(snapshot: snapshot), at: 0)
+            let entry = CallHistoryEntry.from(snapshot: snapshot)
+            history.insert(entry, at: 0)
+            if let persistence {
+                do {
+                    try persistence.history.append(entry)
+                } catch {
+                    Self.log.error("History write failed: \(String(describing: error), privacy: .public)")
+                }
+            }
             calls[update.id] = nil
             return
         }

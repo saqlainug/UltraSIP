@@ -3,7 +3,7 @@ import Security
 
 /// Storage for SIP secrets. The rest of the app deals only in opaque refs
 /// (CLAUDE.md: Keychain only; DB stores stable references; never plaintext).
-protocol SecretStore: Sendable {
+nonisolated protocol SecretStore: Sendable {
     func setPassword(_ password: String, forRef ref: String) throws
     func password(forRef ref: String) throws -> String?
     func deletePassword(forRef ref: String) throws

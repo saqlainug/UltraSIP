@@ -1,0 +1,25 @@
+# MacSIP TestPBX — local Asterisk for integration tier 2 (registration,
+# auth, voicemail, feature codes). See docs/TEST_PBX.md.
+#
+# STATUS: configuration written but NOT yet executed anywhere — Docker is
+# not installed on the primary dev machine (docs/KNOWN_LIMITATIONS.md).
+# First run requires user approval for the image download (CLAUDE.md).
+#
+# Image note: the Asterisk project publishes no official Docker image;
+# `andrius/asterisk` is the de-facto community image. Pin + verify before
+# first use (dependency-review skill applies to test infra too).
+
+services:
+  asterisk:
+    image: andrius/asterisk:alpine-20.5.2
+    container_name: macsip-testpbx
+    restart: unless-stopped
+    # SIP + a narrow RTP range; host networking is unavailable on macOS.
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10020:10000-10020/udp"
+    volumes:
+      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk/voicemail.conf:/etc/asterisk/voicemail.conf:ro
