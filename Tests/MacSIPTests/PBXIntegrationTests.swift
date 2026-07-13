@@ -89,7 +89,7 @@ final class PBXIntegrationTests: XCTestCase {
 
     /// Wrong password must fail with auth detail, not a generic error.
     func testWrongPasswordFailsWithAuthDetail() async throws {
-        try await configure(user: "102", password: "definitely-wrong")
+        try await configure(user: "102", password: "definitely-wrong")  // secretscan:allow intentionally invalid
         let state = try await waitForRegistration(timeout: 20) {
             if case .failed = $0 { return true }
             return false

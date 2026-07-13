@@ -56,7 +56,8 @@ if command -v docker >/dev/null 2>&1 \
   set +e
   OUTPUT="$(TEST_RUNNER_MACSIP_PBX=1 \
     xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug \
-    -only-testing:MacSIPTests/PBXIntegrationTests test 2>&1)"
+    -only-testing:MacSIPTests/PBXIntegrationTests \
+    -only-testing:MacSIPTests/TransportSecurityTests test 2>&1)"
   STATUS=$?
   set -e
   echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true

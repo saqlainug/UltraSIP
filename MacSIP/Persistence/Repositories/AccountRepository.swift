@@ -20,15 +20,18 @@ nonisolated final class AccountRepository: AccountStoring {
         try db.execute(
             """
             INSERT INTO accounts (id, label, domain, registrar, username, auth_id,
-                display_name, transport, reg_interval, keychain_ref, registration_enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                display_name, transport, reg_interval, keychain_ref, registration_enabled,
+                media_encryption, tls_verify_disabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 label = excluded.label, domain = excluded.domain,
                 registrar = excluded.registrar, username = excluded.username,
                 auth_id = excluded.auth_id, display_name = excluded.display_name,
                 transport = excluded.transport, reg_interval = excluded.reg_interval,
                 keychain_ref = excluded.keychain_ref,
-                registration_enabled = excluded.registration_enabled
+                registration_enabled = excluded.registration_enabled,
+                media_encryption = excluded.media_encryption,
+                tls_verify_disabled = excluded.tls_verify_disabled
             """,
             [
                 .text(account.id.uuidString), .text(account.label), .text(account.domain),
@@ -36,6 +39,8 @@ nonisolated final class AccountRepository: AccountStoring {
                 .text(account.displayName), .text(account.transport.rawValue),
                 .integer(Int64(account.registrationInterval)), .text(account.keychainPasswordRef),
                 .integer(account.registrationEnabled ? 1 : 0),
+                .text(account.mediaEncryption.rawValue),
+                .integer(account.tlsVerificationDisabled ? 1 : 0),
             ])
     }
 
@@ -55,7 +60,10 @@ nonisolated final class AccountRepository: AccountStoring {
                 transport: SIPAccountConfig.Transport(rawValue: row["transport"]?.textValue ?? "udp") ?? .udp,
                 registrationInterval: Int(row["reg_interval"]?.intValue ?? 0),
                 keychainPasswordRef: row["keychain_ref"]?.textValue ?? "",
-                registrationEnabled: (row["registration_enabled"]?.intValue ?? 1) == 1)
+                registrationEnabled: (row["registration_enabled"]?.intValue ?? 1) == 1,
+                mediaEncryption: SIPAccountConfig.MediaEncryption(
+                    rawValue: row["media_encryption"]?.textValue ?? "none") ?? .none,
+                tlsVerificationDisabled: (row["tls_verify_disabled"]?.intValue ?? 0) == 1)
         }
     }
 

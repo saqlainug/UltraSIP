@@ -36,10 +36,10 @@ the TestPBX tier.
 | Keychain password storage | ini stores obfuscated pw | Unit tested 2026-07-13 | Security/KeychainStore.swift | Round-trip vs real Keychain ✔ | n/a | — | — | DB stores refs only; no-secret-columns enforced by test |
 | Account import/export | Export/import since 3.22.5 | Researched | — | — | — | — | — | No plaintext secrets by default |
 | **2. Transport & SIP security** ||||||||
-| UDP / TCP / TLS / UDP+TCP; IPv6 | Yes (UDP+TCP combined mode) | Researched | — | — | — | — | — | — |
+| UDP / TCP / TLS / UDP+TCP; IPv6 | Yes (UDP+TCP combined mode) | UDP+TCP+TLS: **Integration tested 2026-07-14**; UDP+TCP combined mode + IPv6: Not started | SIPCore/Bridge/MSPEngine.mm, Domain (Transport enum) | ✔ | TCP registration ✔; TLS registration ✔ (via override; see TLS row) | — | — | — |
 | Digest auth; outbound proxy | Yes | Researched | — | — | — | — | — | — |
-| TLS system trust + hostname verify; visible insecure override | Yes | Researched | — | — | — | — | — | Apple TLS backend (RB §2) |
-| SRTP optional/mandatory | Yes | Researched | — | — | — | — | — | SDES works with current build |
+| TLS system trust + hostname verify; visible insecure override | Yes | **Integration tested 2026-07-14** | SIPCore/Bridge/MSPEngine.mm (transport recreation), Features/Accounts | ✔ | Untrusted self-signed cert REJECTED by default ✔; visible per-account override registers over TLS ✔ | Trusted-CA happy path needs a real/installed CA (manual item) | — | Apple TLS backend, system trust store |
+| SRTP optional/mandatory | Yes | **Integration tested 2026-07-14** | SIPCore/Bridge/MSPEngine.mm (srtpUse), Domain (MediaEncryption) | ✔ | Mandatory↔SRTP peer: encrypted media both ways ✔; mandatory vs non-SRTP endpoint: 488, no cleartext fallback ✔ | — | — | Asterisk-side SRTP blocked by image (no res_srtp) — matrix note |
 | DTLS-SRTP | Yes (since 3.22.3) | Not applicable | — | — | — | — | — | User decision 2026-07-13: waived (needs OpenSSL backend, RB §2); SDES-SRTP is the supported encryption |
 | **3. Dialer** ||||||||
 | Number/URI parsing (tel, E.164, SIP/SIPS URI, IP, params) | Yes | Researched | — | — | — | — | — | — |

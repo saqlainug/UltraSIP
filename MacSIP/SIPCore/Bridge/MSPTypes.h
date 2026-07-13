@@ -80,16 +80,28 @@ typedef NS_ENUM(NSInteger, MSPEarlyMediaFlag) {
 - (instancetype)init NS_UNAVAILABLE;
 @end
 
+typedef NS_ENUM(NSInteger, MSPSRTPPolicy) {
+    MSPSRTPPolicyDisabled = 0,
+    MSPSRTPPolicyOptional = 1,
+    MSPSRTPPolicyMandatory = 2,
+};
+
 /// Transient account configuration handed to the bridge. The password is
 /// passed through to the SIP stack's credential store and is never logged,
 /// persisted, or echoed back by the bridge (CLAUDE.md security rules).
 @interface MSPAccountConfig : NSObject
 @property(nonatomic, copy) NSString *aorUri;       // sip:user@domain
-@property(nonatomic, copy) NSString *registrarUri; // sip:domain[:port]
+@property(nonatomic, copy) NSString *registrarUri; // sip:domain[;transport=…]
+/// Optional outbound proxy URI (routes ALL account requests); empty = none.
+@property(nonatomic, copy) NSString *proxyUri;
 @property(nonatomic, copy) NSString *username;
 @property(nonatomic, copy) NSString *authID;       // empty = username
 @property(nonatomic, copy) NSString *password;
 @property(nonatomic) NSInteger regIntervalSeconds; // 0 = stack default
+@property(nonatomic) MSPSRTPPolicy srtpPolicy;
+/// Per-account TLS trust override (default NO = verify). Changing this
+/// recreates the TLS transport; only valid while no calls are active.
+@property(nonatomic) BOOL tlsVerifyDisabled;
 @end
 
 NS_ASSUME_NONNULL_END

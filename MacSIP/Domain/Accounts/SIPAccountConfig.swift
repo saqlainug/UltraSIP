@@ -7,6 +7,16 @@ import Foundation
 nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     enum Transport: String, CaseIterable, Sendable {
         case udp
+        case tcp
+        case tls
+    }
+
+    /// SPEC §2 media-encryption policy. DTLS-SRTP is out of scope by
+    /// decision (2026-07-13); SDES is the supported keying.
+    enum MediaEncryption: String, CaseIterable, Sendable {
+        case none
+        case srtpOptional = "srtp-optional"
+        case srtpMandatory = "srtp-mandatory"
     }
 
     var id: UUID
@@ -28,6 +38,11 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     /// false = "local account": direct SIP/IP calls with no REGISTER
     /// (SPEC §1). The bridge skips registration when this is off.
     var registrationEnabled: Bool
+    var mediaEncryption: MediaEncryption
+    /// Per-account TLS trust override (SPEC §2): visible in UI, default
+    /// OFF. When on, server certificates are NOT verified — never enable
+    /// silently, never global.
+    var tlsVerificationDisabled: Bool
 
     init(
         id: UUID = UUID(),
@@ -40,7 +55,9 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         transport: Transport = .udp,
         registrationInterval: Int = 0,
         keychainPasswordRef: String = "",
-        registrationEnabled: Bool = true
+        registrationEnabled: Bool = true,
+        mediaEncryption: MediaEncryption = .none,
+        tlsVerificationDisabled: Bool = false
     ) {
         self.id = id
         self.label = label
@@ -53,6 +70,13 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         self.registrationInterval = registrationInterval
         self.keychainPasswordRef = keychainPasswordRef
         self.registrationEnabled = registrationEnabled
+        self.mediaEncryption = mediaEncryption
+        self.tlsVerificationDisabled = tlsVerificationDisabled
+    }
+
+    /// URI transport parameter for non-UDP transports ("" for UDP).
+    var transportParameter: String {
+        transport == .udp ? "" : ";transport=\(transport.rawValue)"
     }
 
     /// Address-of-record, e.g. "sip:alice@pbx.example.com".

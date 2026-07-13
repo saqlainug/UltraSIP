@@ -18,9 +18,11 @@ services:
     ports:
       - "5060:5060/udp"
       - "5060:5060/tcp"
+      - "5061:5061/tcp"
       - "10000-10020:10000-10020/udp"
     volumes:
       - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf:ro
       - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
       - ./asterisk/voicemail.conf:/etc/asterisk/voicemail.conf:ro
       - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf:ro
+      - ./asterisk/keys:/etc/asterisk/keys:ro

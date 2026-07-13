@@ -65,8 +65,9 @@ final class PersistenceTests: XCTestCase {
         var config = SIPAccountConfig(
             label: "Work", domain: "pbx.example.com", registrar: "sip:edge.example.com",
             username: "alice", authorizationID: "alice-auth", displayName: "Alice",
-            registrationInterval: 120, keychainPasswordRef: "sip-account-x",
-            registrationEnabled: false)
+            transport: .tls, registrationInterval: 120, keychainPasswordRef: "sip-account-x",
+            registrationEnabled: false, mediaEncryption: .srtpMandatory,
+            tlsVerificationDisabled: true)
         try repo.save(config)
         XCTAssertEqual(try repo.loadAll(), [config])
 

@@ -151,6 +151,36 @@ final class SIPIntegrationTests: XCTestCase {
         }
     }
 
+    /// Mandatory SDES-SRTP between two real PJSIP stacks: both sides
+    /// require encryption; the call connecting at all proves SRTP
+    /// negotiation, and looped RTP counters prove encrypted media flows.
+    /// (The TestPBX's Asterisk image lacks res_srtp — see
+    /// docs/INTEROP_TEST_MATRIX.md — so the positive SRTP case runs here.)
+    func testSRTPMandatoryCallWithSRTPPeer() async throws {
+        try peer.launch(extraArgs: ["--auto-answer=200", "--auto-loop", "--use-srtp=2", "--srtp-secure=0"])
+        try await peer.waitUntilReady()
+
+        try await engine.configureAccount(
+            SIPAccountConfig(
+                label: "srtp-loop", domain: "127.0.0.1", username: "mactest",
+                registrationEnabled: false, mediaEncryption: .srtpMandatory),
+            password: "")
+
+        let id = try await engine.makeCall(to: "sip:loop@127.0.0.1:\(Self.peerPort)")
+        _ = try await waitForUpdate(timeout: 10) {
+            $0.id == id && $0.phase == .connected(HoldState.none)
+        }
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        let stats = await engine.rtpStats(for: id)
+        XCTAssertGreaterThan(stats.tx, 20, "expected SRTP out, got \(stats.tx)")
+        XCTAssertGreaterThan(stats.rx, 20, "expected SRTP looped back, got \(stats.rx)")
+        engine.hangup(id)
+        _ = try await waitForUpdate(timeout: 8) {
+            if case .disconnected = $0.phase { return $0.id == id }
+            return false
+        }
+    }
+
     /// Incoming call rejected as busy: the peer must see 486.
     func testIncomingCallRejectBusy() async throws {
         try peer.launch(extraArgs: [])

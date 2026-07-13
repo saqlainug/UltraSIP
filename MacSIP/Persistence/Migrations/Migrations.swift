@@ -39,7 +39,14 @@ nonisolated enum Migrations {
             );
             CREATE INDEX idx_history_started ON call_history(started_at DESC);
             """
-        )
+        ),
+        (
+            2,
+            """
+            ALTER TABLE accounts ADD COLUMN media_encryption TEXT NOT NULL DEFAULT 'none';
+            ALTER TABLE accounts ADD COLUMN tls_verify_disabled INTEGER NOT NULL DEFAULT 0;
+            """
+        ),
     ]
 
     static var latestVersion: Int { all.map(\.version).max() ?? 0 }

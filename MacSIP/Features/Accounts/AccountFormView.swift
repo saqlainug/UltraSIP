@@ -13,6 +13,9 @@ struct AccountFormView: View {
     @State private var authorizationID = ""
     @State private var displayName = ""
     @State private var registrar = ""
+    @State private var transport: SIPAccountConfig.Transport = .udp
+    @State private var mediaEncryption: SIPAccountConfig.MediaEncryption = .none
+    @State private var tlsVerificationDisabled = false
 
     private var isEditing: Bool { model.account != nil }
 
@@ -30,9 +33,33 @@ struct AccountFormView: View {
                 TextField("Auth ID (optional)", text: $authorizationID)
                 TextField("Display name (optional)", text: $displayName)
                 TextField("Registrar (optional)", text: $registrar, prompt: Text("sip:pbx.example.com"))
+                Picker("Transport", selection: $transport) {
+                    Text("UDP").tag(SIPAccountConfig.Transport.udp)
+                    Text("TCP").tag(SIPAccountConfig.Transport.tcp)
+                    Text("TLS").tag(SIPAccountConfig.Transport.tls)
+                }
+                Picker("Media encryption", selection: $mediaEncryption) {
+                    Text("None").tag(SIPAccountConfig.MediaEncryption.none)
+                    Text("SRTP (optional)").tag(SIPAccountConfig.MediaEncryption.srtpOptional)
+                    Text("SRTP (mandatory)").tag(SIPAccountConfig.MediaEncryption.srtpMandatory)
+                }
             }
             .formStyle(.columns)
             .textFieldStyle(.roundedBorder)
+
+            if transport == .tls {
+                Toggle(isOn: $tlsVerificationDisabled) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Allow invalid TLS certificates")
+                        Text("Insecure — disables server verification for this account only")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .accessibilityLabel(
+                    "Allow invalid TLS certificates. Insecure: disables server certificate verification for this account"
+                )
+            }
 
             if let error = model.lastError {
                 Text(error)
@@ -55,6 +82,9 @@ struct AccountFormView: View {
                     config.authorizationID = authorizationID
                     config.displayName = displayName
                     config.registrar = registrar
+                    config.transport = transport
+                    config.mediaEncryption = mediaEncryption
+                    config.tlsVerificationDisabled = transport == .tls && tlsVerificationDisabled
                     let newPassword = password
                     Task { await model.saveAccount(config, newPassword: newPassword) }
                 }
@@ -71,6 +101,9 @@ struct AccountFormView: View {
             authorizationID = account.authorizationID
             displayName = account.displayName
             registrar = account.registrar
+            transport = account.transport
+            mediaEncryption = account.mediaEncryption
+            tlsVerificationDisabled = account.tlsVerificationDisabled
         }
     }
 }

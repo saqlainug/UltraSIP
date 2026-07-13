@@ -9,7 +9,13 @@ Updated per release; honest by policy (never imply unimplemented features).
   (docs/INTEROP_TEST_MATRIX.md). Gaps that remain in the matrix:
   PBX→MacSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
   scenario coverage.
-- Single account only; UDP transport only (TCP/TLS/SRTP = Milestone 2).
+- Single account only (multiple accounts + switching = later M2 slice).
+- TLS trusted-CA happy path untested (validation-rejects and override
+  paths are integration-tested; a trusted-CA run needs a CA installed in
+  the system keychain — manual item). UDP+TCP combined mode and IPv6
+  pending. STUN/TURN/ICE and network/sleep-wake recovery pending (M2).
+- TestPBX Asterisk image lacks res_srtp — PBX-side SRTP blocked until an
+  SRTP-capable image passes dependency-review (endpoint config ready).
 - Mic mute is implemented but has no media-level automated assertion yet;
   remote-output mute not implemented.
 - DTMF is RFC 4733 only (INFO/in-band + preference setting pending).

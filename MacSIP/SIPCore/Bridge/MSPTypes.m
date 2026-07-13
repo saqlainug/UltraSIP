@@ -50,10 +50,13 @@
     if ((self = [super init])) {
         _aorUri = @"";
         _registrarUri = @"";
+        _proxyUri = @"";
         _username = @"";
         _authID = @"";
         _password = @"";
         _regIntervalSeconds = 0;
+        _srtpPolicy = MSPSRTPPolicyDisabled;
+        _tlsVerifyDisabled = NO;
     }
     return self;
 }

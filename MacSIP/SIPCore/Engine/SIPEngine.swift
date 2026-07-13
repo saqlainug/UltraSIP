@@ -72,7 +72,19 @@ final class SIPEngine: NSObject {
         let bridgeConfig = MSPAccountConfig()
         bridgeConfig.aorUri = config.aor
         // Empty registrar = local account, no REGISTER sent (SPEC §1).
-        bridgeConfig.registrarUri = config.registrationEnabled ? config.effectiveRegistrar : ""
+        // Non-UDP transports: transport parameter on the registrar + an
+        // outbound proxy so ALL account requests (INVITE included) use it.
+        bridgeConfig.registrarUri =
+            config.registrationEnabled ? config.effectiveRegistrar + config.transportParameter : ""
+        bridgeConfig.proxyUri =
+            config.transport == .udp ? "" : "sip:\(config.domain)\(config.transportParameter);lr"
+        bridgeConfig.srtpPolicy =
+            switch config.mediaEncryption {
+            case .none: .disabled
+            case .srtpOptional: .optional
+            case .srtpMandatory: .mandatory
+            }
+        bridgeConfig.tlsVerifyDisabled = config.tlsVerificationDisabled
         bridgeConfig.username = config.username
         bridgeConfig.authID = config.authorizationID
         bridgeConfig.password = password

@@ -103,6 +103,9 @@ struct EngineCore {
     std::map<int, BridgeCall *> calls;
     std::set<int> mutedCalls;
     bool started = false;
+    int tlsTransportId = -1;
+    bool tlsVerifyDisabled = false;  // current TLS transport's policy
+    bool tlsAvailable = false;
 };
 
 static MSPMediaStatus mediaStatusFrom(const pj::CallInfo &info) {
@@ -313,8 +316,12 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             config.uaConfig.userAgent = ua;
             self->_core.endpoint->libInit(config);
             pj::TransportConfig transport;
-            transport.port = (unsigned)port;  // 0 = ephemeral (M1: UDP only)
+            transport.port = (unsigned)port;  // 0 = ephemeral
             self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_UDP, transport);
+            pj::TransportConfig tcpTransport;
+            tcpTransport.port = (unsigned)port;
+            self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TCP, tcpTransport);
+            [self createTLSTransportVerifyDisabled:NO];
             self->_core.endpoint->libStart();
             if (useNullAudio) {
                 self->_core.endpoint->audDevManager().setNullDev();
@@ -373,16 +380,45 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
     }];
 }
 
+/// Engine thread only. TLS verification is a TRANSPORT property in PJSIP,
+/// so the per-account override (SPEC §2: visible, default-off) is realized
+/// by recreating the TLS transport when the flag changes. Verification
+/// uses the system trust store via the Apple TLS backend.
+- (void)createTLSTransportVerifyDisabled:(BOOL)verifyDisabled {
+    try {
+        if (self->_core.tlsTransportId >= 0) {
+            self->_core.endpoint->transportClose(self->_core.tlsTransportId);
+            self->_core.tlsTransportId = -1;
+            self->_core.tlsAvailable = false;
+        }
+        pj::TransportConfig tlsTransport;
+        tlsTransport.port = 0;
+        tlsTransport.tlsConfig.verifyServer = verifyDisabled ? false : true;
+        self->_core.tlsTransportId =
+            self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TLS, tlsTransport);
+        self->_core.tlsVerifyDisabled = verifyDisabled;
+        self->_core.tlsAvailable = true;
+    } catch (const pj::Error &e) {
+        PJ_LOG(1, ("MSPEngine", "TLS transport unavailable: %s", e.reason.c_str()));
+        self->_core.tlsAvailable = false;
+    }
+}
+
 #pragma mark Account
 
 - (void)configureAccount:(MSPAccountConfig *)config
               completion:(void (^)(NSError *_Nullable))completion {
     std::string aor([config.aorUri UTF8String] ?: "");
     std::string registrar([config.registrarUri UTF8String] ?: "");
+    std::string proxy([config.proxyUri UTF8String] ?: "");
     std::string user([config.username UTF8String] ?: "");
     std::string authID([config.authID UTF8String] ?: "");
     std::string password([config.password UTF8String] ?: "");
     long interval = config.regIntervalSeconds;
+    MSPSRTPPolicy srtpPolicy = config.srtpPolicy;
+    BOOL tlsVerifyDisabled = config.tlsVerifyDisabled;
+    BOOL usesTLS = [config.registrarUri containsString:@"transport=tls"]
+        || [config.proxyUri containsString:@"transport=tls"];
     [self onEngine:^{
         if (!self->_core.started) {
             NSError *error = [NSError errorWithDomain:MSPErrorDomain
@@ -391,15 +427,43 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             dispatch_async(self->_delegateQueue, ^{ completion(error); });
             return;
         }
+        if (usesTLS && !self->_core.tlsAvailable) {
+            NSError *error =
+                [NSError errorWithDomain:MSPErrorDomain
+                                    code:-3
+                                userInfo:@{NSLocalizedDescriptionKey : @"TLS transport unavailable"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
         try {
             self->_core.account.reset();  // replace: unregister + delete old
+            if (usesTLS && self->_core.tlsVerifyDisabled != (bool)tlsVerifyDisabled
+                && self->_core.calls.empty()) {
+                [self createTLSTransportVerifyDisabled:tlsVerifyDisabled];
+            }
             pj::AccountConfig accountConfig;
             accountConfig.idUri = aor;
             accountConfig.regConfig.registrarUri = registrar;
             accountConfig.regConfig.registerOnAdd = true;
             if (interval > 0) accountConfig.regConfig.timeoutSec = (unsigned)interval;
+            if (!proxy.empty()) accountConfig.sipConfig.proxies.push_back(proxy);
             pj::AuthCredInfo cred("digest", "*", authID.empty() ? user : authID, 0, password);
             accountConfig.sipConfig.authCreds.push_back(cred);
+            switch (srtpPolicy) {
+                case MSPSRTPPolicyDisabled:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_DISABLED;
+                    break;
+                case MSPSRTPPolicyOptional:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_OPTIONAL;
+                    break;
+                case MSPSRTPPolicyMandatory:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_MANDATORY;
+                    break;
+            }
+            // SDES keys travel in SDP: secure signaling (TLS) is strongly
+            // recommended with SRTP but not enforced here — policy is the
+            // user's per SPEC §2 ("controlled secure-media fallback").
+            accountConfig.mediaConfig.srtpSecureSignaling = 0;
             auto account = std::make_unique<macsip::BridgeAccount>(self);
             account->create(accountConfig, true);
             self->_core.account = std::move(account);

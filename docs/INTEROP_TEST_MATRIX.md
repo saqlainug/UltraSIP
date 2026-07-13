@@ -17,7 +17,12 @@ Peers/infrastructure vs scenario, as of **2026-07-14**:
 | DTMF RFC 4733 delivery | **Pass** (tier 1, 2026-07-13; peer log assertion) | Not tested (602 read-back scenario pending) | Not tested | Not tested |
 | Hold / resume (re-INVITE) | **Pass** (tier 1, 2026-07-13) | Not tested | Not tested | Not tested |
 | Voicemail, feature codes, pickup | Not applicable | Not tested (dialplan ready) | Not tested | Not tested |
-| TCP / TLS / SRTP | Not tested (M2) | Not tested (TCP transport configured; TLS pending M2) | Not tested | Not tested |
+| TCP registration | Not applicable | **Pass** (tier 2, 2026-07-14) | Not tested | Not tested |
+| TLS: untrusted cert rejected by default | Not applicable | **Pass** (tier 2, 2026-07-14; self-signed CA refused, no registration) | Not tested | Not tested |
+| TLS: per-account insecure override registers (encrypted signaling) | Not applicable | **Pass** (tier 2, 2026-07-14) | Not tested | Not tested |
+| TLS: trusted-CA happy path | Not applicable | Not tested (needs CA installed in system trust — manual item) | Not tested | Not tested |
+| SDES-SRTP mandatory, encrypted media both ways | **Pass** (tier 1, 2026-07-14; ↔ pjsua --use-srtp=2) | **Blocked** — image lacks res_srtp (488s all SAVP; endpoint 103 config ready for an SRTP-capable image) | Not tested | Not tested |
+| SRTP mandatory vs plain endpoint: no cleartext fallback | Not tested | **Pass** (tier 2, 2026-07-14; 488, never connected) | Not tested | Not tested |
 
 Environment notes: TestPBX runs in Docker (image `andrius/asterisk:
 alpine-20.5.2`); the UDP path through Docker's proxy drops oversized SIP
