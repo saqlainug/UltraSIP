@@ -32,7 +32,12 @@ extern NSErrorDomain const MSPErrorDomain;
 
 /// Starts the PJSIP runtime (endpoint + UDP transport) on the engine
 /// thread. Idempotent: starting a started engine reports no error.
+/// port 0 = ephemeral local SIP port. useNullAudio replaces the sound
+/// device with PJSIP's null device (integration tests only — keeps media
+/// flowing without microphone/TCC involvement).
 - (void)startWithUserAgent:(NSString *)userAgent
+                      port:(NSInteger)port
+              useNullAudio:(BOOL)useNullAudio
                 completion:(void (^)(NSError *_Nullable error))completion;
 
 /// Stops everything in the documented teardown order. Idempotent.
@@ -60,6 +65,12 @@ extern NSErrorDomain const MSPErrorDomain;
 - (void)setCall:(NSInteger)callId muted:(BOOL)muted;
 /// RFC 4733 digits (0-9, *, #, A-D).
 - (void)sendDTMF:(NSString *)digits toCall:(NSInteger)callId;
+
+/// RTP packet counters for a call's first audio stream (media
+/// verification: a 200 OK is not a working call). Reports -1/-1 when the
+/// call or its stream doesn't exist.
+- (void)statsForCall:(NSInteger)callId
+          completion:(void (^)(NSInteger txPackets, NSInteger rxPackets))completion;
 
 /// Sanitized runtime diagnostics (versions, transport, codecs, account
 /// state). Never contains credentials.

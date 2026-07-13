@@ -292,6 +292,8 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
 #pragma mark Lifecycle
 
 - (void)startWithUserAgent:(NSString *)userAgent
+                      port:(NSInteger)port
+              useNullAudio:(BOOL)useNullAudio
                 completion:(void (^)(NSError *_Nullable))completion {
     std::string ua([userAgent UTF8String] ?: "MacSIP");
     [self onEngine:^{
@@ -311,9 +313,12 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             config.uaConfig.userAgent = ua;
             self->_core.endpoint->libInit(config);
             pj::TransportConfig transport;
-            transport.port = 0;  // ephemeral local SIP port (M1: UDP only)
+            transport.port = (unsigned)port;  // 0 = ephemeral (M1: UDP only)
             self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_UDP, transport);
             self->_core.endpoint->libStart();
+            if (useNullAudio) {
+                self->_core.endpoint->audDevManager().setNullDev();
+            }
             self->_core.started = true;
             dispatch_async(self->_delegateQueue, ^{ completion(nil); });
         } catch (const pj::Error &e) {
@@ -520,6 +525,24 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             call->dialDtmf(dtmf);
         } catch (const pj::Error &) {
         }
+    }];
+}
+
+- (void)statsForCall:(NSInteger)callId
+          completion:(void (^)(NSInteger, NSInteger))completion {
+    [self onEngine:^{
+        NSInteger tx = -1;
+        NSInteger rx = -1;
+        auto found = self->_core.calls.find((int)callId);
+        if (found != self->_core.calls.end()) {
+            try {
+                pj::StreamStat stat = found->second->getStreamStat(0);
+                tx = (NSInteger)stat.rtcp.txStat.pkt;
+                rx = (NSInteger)stat.rtcp.rxStat.pkt;
+            } catch (const pj::Error &) {
+            }
+        }
+        dispatch_async(self->_delegateQueue, ^{ completion(tx, rx); });
     }];
 }
 

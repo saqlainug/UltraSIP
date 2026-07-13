@@ -44,6 +44,9 @@ final class AppModel: ObservableObject {
     // MARK: Engine lifecycle
 
     func startEngine() async {
+        // Under XCTest the host app must NOT start PJSIP: the library is a
+        // process-wide singleton and integration tests own their instance.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         guard engineStatus == .stopped || engineStatus.isFailure else { return }
         engineStatus = .starting
         do {

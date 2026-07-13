@@ -44,9 +44,11 @@ final class SIPEngine: NSObject {
 
     // MARK: Lifecycle
 
-    func start() async throws {
+    /// port 0 = ephemeral. nullAudio is for integration tests only (media
+    /// flows without microphone/TCC involvement).
+    func start(port: Int = 0, nullAudio: Bool = false) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            bridge.start(withUserAgent: "MacSIP/0.1.0") { error in
+            bridge.start(withUserAgent: "MacSIP/0.1.0", port: port, useNullAudio: nullAudio) { error in
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
@@ -69,7 +71,8 @@ final class SIPEngine: NSObject {
     func configureAccount(_ config: SIPAccountConfig, password: String) async throws {
         let bridgeConfig = MSPAccountConfig()
         bridgeConfig.aorUri = config.aor
-        bridgeConfig.registrarUri = config.effectiveRegistrar
+        // Empty registrar = local account, no REGISTER sent (SPEC §1).
+        bridgeConfig.registrarUri = config.registrationEnabled ? config.effectiveRegistrar : ""
         bridgeConfig.username = config.username
         bridgeConfig.authID = config.authorizationID
         bridgeConfig.password = password
@@ -123,6 +126,14 @@ final class SIPEngine: NSObject {
     func diagnostics() async -> String {
         await withCheckedContinuation { (continuation: CheckedContinuation<String, Never>) in
             bridge.diagnostics { info in continuation.resume(returning: info) }
+        }
+    }
+
+    /// RTP packet counters (tx, rx) for media verification; (-1, -1) when
+    /// the call/stream is gone.
+    func rtpStats(for id: CallID) async -> (tx: Int, rx: Int) {
+        await withCheckedContinuation { (continuation: CheckedContinuation<(tx: Int, rx: Int), Never>) in
+            bridge.stats(forCall: id.raw) { tx, rx in continuation.resume(returning: (tx, rx)) }
         }
     }
 

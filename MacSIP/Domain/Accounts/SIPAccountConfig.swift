@@ -25,6 +25,9 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     var registrationInterval: Int
     /// Opaque Keychain item reference. NEVER the password itself.
     var keychainPasswordRef: String
+    /// false = "local account": direct SIP/IP calls with no REGISTER
+    /// (SPEC §1). The bridge skips registration when this is off.
+    var registrationEnabled: Bool
 
     init(
         id: UUID = UUID(),
@@ -36,7 +39,8 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         displayName: String = "",
         transport: Transport = .udp,
         registrationInterval: Int = 0,
-        keychainPasswordRef: String = ""
+        keychainPasswordRef: String = "",
+        registrationEnabled: Bool = true
     ) {
         self.id = id
         self.label = label
@@ -48,6 +52,7 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         self.transport = transport
         self.registrationInterval = registrationInterval
         self.keychainPasswordRef = keychainPasswordRef
+        self.registrationEnabled = registrationEnabled
     }
 
     /// Address-of-record, e.g. "sip:alice@pbx.example.com".
