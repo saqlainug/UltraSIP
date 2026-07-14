@@ -20,8 +20,10 @@ What actually works today (verified 2026-07-13):
   hold/resume via re-INVITE, RFC 4733 DTMF — integration-tested
 - ✅ Keychain-only password storage (round-trip tested); SQLite persistence
   with versioned, tested migrations (no secret columns, enforced by test)
-- ✅ Functional compact UI: account form, dialer, in-call controls with
-  DTMF keypad, incoming-call banner, history, diagnostics
+- ✅ Native compact UI (Milestone 3): 360×560 AppKit window with dialpad
+  (3×4 keypad), searchable call history, in-call controls, floating
+  incoming-call panel (all Spaces, never steals focus), menu-bar extra,
+  Settings (launch at login, accounts, audio device selection), DND
 - ✅ Reproducible, checksum-pinned PJSIP 2.17 universal build; CI; full
   governance docs (threat model, licensing, research baseline)
 - ✅ Registration with digest auth against a real PBX (Asterisk TestPBX),

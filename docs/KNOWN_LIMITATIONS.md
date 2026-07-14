@@ -2,6 +2,24 @@
 
 Updated per release; honest by policy (never imply unimplemented features).
 
+## As of Milestone 3 (2026-07-14)
+
+- The UI is built and renders to the approved layout spec, but its
+  **visual/interaction behaviors are not yet human-verified**: the
+  floating incoming-call panel, menu-bar extra, VoiceOver pass, light
+  mode, multi-monitor placement, and audio device switching are manual
+  items in TESTING.md, all still "Not verified".
+- Contacts tab exists but is intentionally empty (contacts land in M5).
+- Auto-answer, call forwarding, and auto-conference indicators are
+  deliberately absent from the status footer until those features exist
+  (M4) — no controls that imply unimplemented functionality.
+- Ring-device selection and audio hot-plug recovery are not implemented
+  (input/output selection is).
+- Dev builds are ad-hoc signed, so macOS asks for the login-keychain
+  password on each rebuild (the Keychain ACL is bound to the binary's
+  changing code identity). A stable dev signing identity fixes it;
+  release builds are Developer ID signed and unaffected.
+
 ## As of Milestone 1 (2026-07-14)
 
 - Registration, auth-failure detail, and PBX-routed calls with

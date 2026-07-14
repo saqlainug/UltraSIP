@@ -10,10 +10,11 @@ RESEARCH_BASELINE.md; implementation has not begun. A feature may only
 graduate with evidence (test run, command output) recorded in the change
 that graduates it.
 
-Last full review: **2026-07-14** (Milestone 1 verified end-to-end:
-registration + digest auth + failure detail against the Asterisk TestPBX,
-calls with PBX-relayed bidirectional RTP, and the pjsua local loop — all
-automated in scripts/integration-test.sh).
+Last full review: **2026-07-14** (Milestones 1–2 verified end-to-end;
+Milestone 3 compact GUI implemented against the approved
+docs/UI_LAYOUT_SPEC.md — app renders to spec, all SIP suites still green;
+visual/VoiceOver behaviors are manual items in TESTING.md, not yet
+verified).
 
 "Integration tested (local loop)" = verified against a real pjsua SIP peer
 over localhost UDP with RTP packet-counter and peer-log assertions
@@ -45,7 +46,8 @@ the TestPBX tier.
 | **3. Dialer** ||||||||
 | Number/URI parsing (tel, E.164, SIP/SIPS URI, IP, params) | Yes | Researched | — | — | — | — | — | — |
 | Dial plan language + prefix | Pattern lang: x, [..], <d:s>, ., \| | Prefix: Unit tested 2026-07-14 (bare numbers only; never corrupts URIs). Pattern language: Not started | Domain/Calls/DialTarget.swift | ✔ | Exercised by call tests | — | — | Full dial-plan grammar is a later slice |
-| Redial, paste, keyboard entry, suggestions | Yes | Not started (M3 dialpad) | — | — | — | — | — | — |
+| Redial, paste, keyboard entry, suggestions | Yes | Implemented 2026-07-14 (redial, keyboard, paste via Edit menu); suggestions: Not started (M5, needs contacts) | Features/Dialer/DialerView.swift | — | — | Rendered ✔ (screenshot) | — | Last-dialed persisted |
+| 3×4 keypad (types, or DTMF during call) | Yes | Implemented 2026-07-14 | Features/Dialer/DialerView.swift | — | DTMF path integration-tested | Rendered ✔ | — | — |
 | Voicemail dialing | Voicemail Number setting | Implemented 2026-07-14 | App/AppModel.swift (dialVoicemail), Features/Dialer | Validation ✔ | — | — | PBX voicemail app | Button appears only when a number is configured |
 | Post-connect DTMF (comma pauses) | Yes | Researched | — | — | — | — | — | — |
 | **4. Calls** ||||||||
@@ -66,11 +68,11 @@ the TestPBX tier.
 | **7. Conference** ||||||||
 | Local multi-party audio conf (PJSIP bridge), add/remove/end | Yes; AC auto-conference toggle | Researched | — | — | — | — | — | M4 |
 | **8. DND / auto-answer / forwarding** ||||||||
-| DND toggle + behavior | DND switch | Researched | — | — | — | — | — | — |
+| DND toggle + behavior | DND switch | Implemented 2026-07-14 (rejects 486 + records missed call; footer + menu bar; persisted) | App/AppModel.swift, App/StatusFooterView.swift | — | — | Manual item pending | — | Notification-on-missed: M4 |
 | Auto-answer: delay, wildcards, SIP headers, audible warning | AA switch; Call-Info/X-AUTOANSWER headers | Researched | — | — | — | — | — | Header trust policy (T13) |
 | Forwarding (immediate/busy/no-answer + delay) | FWD switch | Researched | — | — | — | — | — | PBX-dependent paths documented |
 | **9. Audio media** ||||||||
-| Device selection (in/out/ring), follow-default, hot-plug recovery | Yes | Researched | — | — | — | — | — | M1 basic; full M3+ |
+| Device selection (in/out/ring), follow-default, hot-plug recovery | Yes | Input/output selection + follow-default: Implemented 2026-07-14 (real enumeration via bridge, applied live, persisted). Ring device + hot-plug recovery: Not started | SIPCore/Bridge (audioDevices/setCaptureDevice), Features/Settings | — | — | Manual item pending | — | — |
 | Echo cancel, VAD, noise suppression, gain | WebRTC EC + VAD | Researched | — | — | — | — | — | WebRTC AEC compiled in |
 | Custom ringtone, sound events, audio test | Yes | Researched | — | — | — | — | — | — |
 | Bluetooth/USB/HID headset buttons | Jabra/Plantronics HID | Researched | — | — | — | — | — | Manual-test only items |
@@ -109,6 +111,8 @@ the TestPBX tier.
 | Versioned export/import (accounts/settings/contacts/shortcuts/history) | Since 3.22.5 | Researched | — | — | — | — | — | Encrypted credential export = opt-in + passphrase (SPEC §21) |
 | MicroSIP migration (microsip.ini + Contacts.xml) | UTF-16LE INI + XML schema verified from 3.22.3 src | Researched | — | — | — | — | — | Required feature (CLAUDE.md); round-trip tests |
 | **22. Settings** ||||||||
-| Full native settings surface (16 sections) | Settings dialog + hidden ini | Researched | — | — | — | — | — | M3+ |
+| Full native settings surface (16 sections) | Settings dialog + hidden ini | In progress 2026-07-14: General (launch at login, DND) · Accounts · Audio shipped (⌘, window). Remaining sections ship with their features | Features/Settings/SettingsView.swift | — | — | Manual item pending | — | No empty sections by policy |
+| Compact mode / menu-bar utility behavior | Yes | Implemented 2026-07-14 (close hides to menu bar; reopen; quit warns during calls) | App/AppDelegate.swift, App/MainWindowController.swift | — | — | Manual item pending | — | — |
+| Start at login | Yes | Implemented 2026-07-14 (SMAppService.mainApp) | Platform/LaunchAtLogin/ | — | — | Manual item pending | — | Ad-hoc dev builds may need approval in System Settings |
 | **23. Diagnostics** ||||||||
 | Runtime/env/codec/transport/ICE diagnostics + sanitized export | Log file | Researched | — | — | — | — | — | Redaction tests mandatory (T2) |
