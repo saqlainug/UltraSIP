@@ -49,7 +49,8 @@ if [[ -x "${PJSUA_BIN}" ]]; then
   set +e
   OUTPUT="$(TEST_RUNNER_MACSIP_INTEGRATION=1 TEST_RUNNER_MACSIP_PJSUA="${PJSUA_BIN}" \
     xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug \
-    -only-testing:MacSIPTests/SIPIntegrationTests test 2>&1)"
+    -only-testing:MacSIPTests/SIPIntegrationTests \
+    -only-testing:MacSIPTests/BrokenGatewayTests test 2>&1)"
   STATUS=$?
   set -e
   echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true

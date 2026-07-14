@@ -72,6 +72,19 @@ collapse a silent stream to a single 2-byte SID frame, which strict
 gateways treat as dead RTP; continuous media is the parity behavior until
 a codec-settings UI exposes the toggle.
 
+Offers are AUDIO-ONLY: PJSIP 2.17 defaults txt_cnt (RFC 4103 real-time
+text) to 1, adding an m=text line MicroSIP never sends; at least one
+GSM-termination SBC answers such offers unusably. All CallOpParam sites
+go through MSPAudioOnlyCallParam().
+
+Interop guard `msp-sdp-guard` (module, priority TRANSPORT_LAYER+1):
+strips an SDP body containing zero m= lines from provisional INVITE
+responses. Observed live: a reliable 180 (Require: 100rel) carrying
+`c=IN IP4 0.0.0.0` and no m-lines — RFC 3262 makes that the answer and
+the call dies with PJMEDIA_SDPNEG_ENOMEDIA before the 200 OK's real
+answer. Early media (any m-line present) is never touched. Covered by
+BrokenGatewayTests against a scripted raw-UDP UAS.
+
 Interop debugging: DEBUG builds run at PJSIP log level 5 by default —
 full SIP traces incl. SDP, console only (`MACSIP_NO_SIP_TRACE=1` in the
 environment quiets a run). Not compiled into release builds (traces carry

@@ -93,6 +93,65 @@ void ensureThreadRegisteredIfStarted() {
     pj_thread_register("msp-engine", desc, &thread);
 }
 
+/// Interop guard: some gateways answer a reliable 180 (Require: 100rel)
+/// with a blank SDP body — `c=IN IP4 0.0.0.0`, zero m= lines. RFC 3262
+/// makes that body the formal SDP answer, and an answer with no media
+/// stream fails negotiation (PJMEDIA_SDPNEG_ENOMEDIA) and kills the call
+/// before the real answer in the 200 OK ever arrives (observed live
+/// against a GSM-termination switch). Strip such bodies from provisional
+/// INVITE responses BEFORE the transaction layer (priority < TSX_LAYER)
+/// so the invite session treats the response as a plain SDP-less
+/// provisional. SDP that carries at least one m= line — real early
+/// media — is never touched.
+static pj_bool_t sdpGuardOnRxResponse(pjsip_rx_data *rdata) {
+    pjsip_msg *msg = rdata->msg_info.msg;
+    if (msg == nullptr || msg->type != PJSIP_RESPONSE_MSG) return PJ_FALSE;
+    const int code = msg->line.status.code;
+    if (code <= 100 || code >= 200) return PJ_FALSE;
+    if (rdata->msg_info.cseq == nullptr ||
+        rdata->msg_info.cseq->method.id != PJSIP_INVITE_METHOD) {
+        return PJ_FALSE;
+    }
+    const pjsip_msg_body *body = msg->body;
+    if (body == nullptr || body->data == nullptr || body->len == 0) return PJ_FALSE;
+    if (pj_stricmp2(&body->content_type.type, "application") != 0 ||
+        pj_stricmp2(&body->content_type.subtype, "sdp") != 0) {
+        return PJ_FALSE;
+    }
+    const char *data = static_cast<const char *>(body->data);
+    for (unsigned i = 0; i + 1 < body->len; ++i) {
+        const bool atLineStart = (i == 0) || data[i - 1] == '\n';
+        if (atLineStart && data[i] == 'm' && data[i + 1] == '=') {
+            return PJ_FALSE;  // real media description — leave it alone
+        }
+    }
+    PJ_LOG(2, ("msp-sdp-guard",
+               "Stripping m-line-less SDP from %d INVITE response "
+               "(broken gateway early SDP would fail negotiation as the "
+               "answer); treating as SDP-less provisional",
+               code));
+    msg->body = nullptr;
+    return PJ_FALSE;  // continue normal processing without the body
+}
+
+static pjsip_module sdpGuardModule = {
+    nullptr,
+    nullptr,
+    {const_cast<char *>("msp-sdp-guard"), 13},
+    -1,
+    // Must see responses before mod-tsx-layer consumes them for the
+    // dialog/invite layers.
+    PJSIP_MOD_PRIORITY_TRANSPORT_LAYER + 1,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    &sdpGuardOnRxResponse,
+    nullptr,
+    nullptr,
+};
+
 class BridgeCall;
 
 struct EngineCore {
@@ -374,6 +433,21 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
                 PJ_LOG(2, ("MSPEngine", "IPv6 transports unavailable: %s", e.reason.c_str()));
             }
             self->_core.endpoint->libStart();
+            // Interop guard for blank early SDP (see sdpGuardModule).
+            // The id is reset because the module struct outlives
+            // endpoint stop/start cycles and re-registration asserts on
+            // a stale id.
+            macsip::sdpGuardModule.id = -1;
+            {
+                pj_status_t guardStatus = pjsip_endpt_register_module(
+                    pjsua_get_pjsip_endpt(), &macsip::sdpGuardModule);
+                if (guardStatus != PJ_SUCCESS) {
+                    PJ_LOG(1, ("MSPEngine",
+                               "msp-sdp-guard registration failed (%d) — blank "
+                               "early-SDP gateways will fail negotiation",
+                               guardStatus));
+                }
+            }
             if (useNullAudio) {
                 self->_core.endpoint->audDevManager().setNullDev();
             }
@@ -662,6 +736,18 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
 
 #pragma mark Calls
 
+/// Call settings for every outgoing INVITE / final answer / re-INVITE:
+/// audio only. PJSIP 2.17 defaults txt_cnt (RFC 4103 real-time text) to 1,
+/// which adds an m=text line to every offer. MicroSIP (pjsip 2.15) never
+/// offers text, and at least one GSM-termination SBC responds to the
+/// two-m-line offer with a blank SDP answer that kills the call with
+/// PJMEDIA_SDPNEG_ENOMEDIA. RTT is not a MacSIP feature (PARITY_MATRIX).
+static pj::CallOpParam MSPAudioOnlyCallParam() {
+    pj::CallOpParam prm(true);
+    prm.opt.textCount = 0;
+    return prm;
+}
+
 - (void)makeCallTo:(NSString *)uri
         completion:(void (^)(NSError *_Nullable, NSInteger))completion {
     std::string destination([uri UTF8String] ?: "");
@@ -675,7 +761,7 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
         }
         auto *call = new macsip::BridgeCall(*self->_core.account, self, false);
         try {
-            pj::CallOpParam prm(true);
+            pj::CallOpParam prm = MSPAudioOnlyCallParam();
             call->makeCall(destination, prm);
         } catch (const pj::Error &e) {
             delete call;
@@ -701,7 +787,7 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
 - (void)answerCall:(NSInteger)callId {
     [self withCall:callId do:^(macsip::BridgeCall *call) {
         try {
-            pj::CallOpParam prm(true);
+            pj::CallOpParam prm = MSPAudioOnlyCallParam();
             prm.statusCode = PJSIP_SC_OK;
             call->answer(prm);
         } catch (const pj::Error &) {
@@ -733,7 +819,7 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
 - (void)setCall:(NSInteger)callId held:(BOOL)held {
     [self withCall:callId do:^(macsip::BridgeCall *call) {
         try {
-            pj::CallOpParam prm(true);
+            pj::CallOpParam prm = MSPAudioOnlyCallParam();
             if (held) {
                 call->setHold(prm);
             } else {
