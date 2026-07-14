@@ -43,6 +43,14 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     /// OFF. When on, server certificates are NOT verified — never enable
     /// silently, never global.
     var tlsVerificationDisabled: Bool
+    /// NAT traversal (SPEC §1): STUN server ("host[:port]", empty = none).
+    var stunServer: String
+    var iceEnabled: Bool
+    /// TURN relay ("host[:port]", empty = none). The TURN credential is a
+    /// secret: only its Keychain ref lives here, like the SIP password.
+    var turnServer: String
+    var turnUsername: String
+    var turnPasswordRef: String
 
     init(
         id: UUID = UUID(),
@@ -57,7 +65,12 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         keychainPasswordRef: String = "",
         registrationEnabled: Bool = true,
         mediaEncryption: MediaEncryption = .none,
-        tlsVerificationDisabled: Bool = false
+        tlsVerificationDisabled: Bool = false,
+        stunServer: String = "",
+        iceEnabled: Bool = false,
+        turnServer: String = "",
+        turnUsername: String = "",
+        turnPasswordRef: String = ""
     ) {
         self.id = id
         self.label = label
@@ -72,6 +85,11 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         self.registrationEnabled = registrationEnabled
         self.mediaEncryption = mediaEncryption
         self.tlsVerificationDisabled = tlsVerificationDisabled
+        self.stunServer = stunServer
+        self.iceEnabled = iceEnabled
+        self.turnServer = turnServer
+        self.turnUsername = turnUsername
+        self.turnPasswordRef = turnPasswordRef
     }
 
     /// URI transport parameter for non-UDP transports ("" for UDP).
@@ -91,6 +109,8 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         case invalidDomain(String)
         case invalidRegistrar(String)
         case invalidRegistrationInterval(Int)
+        case invalidSTUNServer(String)
+        case invalidTURNServer(String)
 
         var message: String {
             switch self {
@@ -99,6 +119,8 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
             case .invalidDomain(let value): "Invalid SIP server: \(value)"
             case .invalidRegistrar(let value): "Invalid registrar: \(value)"
             case .invalidRegistrationInterval(let value): "Invalid registration interval: \(value)"
+            case .invalidSTUNServer(let value): "Invalid STUN server: \(value)"
+            case .invalidTURNServer(let value): "Invalid TURN server: \(value)"
             }
         }
     }
@@ -122,6 +144,12 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         }
         if registrationInterval < 0 || registrationInterval > 86400 {
             errors.append(.invalidRegistrationInterval(registrationInterval))
+        }
+        if !stunServer.isEmpty, !Self.isValidHostPort(stunServer) {
+            errors.append(.invalidSTUNServer(stunServer))
+        }
+        if !turnServer.isEmpty, !Self.isValidHostPort(turnServer) {
+            errors.append(.invalidTURNServer(turnServer))
         }
         return errors
     }

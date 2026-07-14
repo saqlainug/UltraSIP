@@ -30,11 +30,13 @@ extern NSErrorDomain const MSPErrorDomain;
 
 @property(nonatomic, weak, nullable) id<MSPEngineDelegate> delegate;
 
-/// Starts the PJSIP runtime (endpoint + UDP transport) on the engine
-/// thread. Idempotent: starting a started engine reports no error.
-/// port 0 = ephemeral local SIP port. useNullAudio replaces the sound
-/// device with PJSIP's null device (integration tests only — keeps media
-/// flowing without microphone/TCC involvement).
+/// Starts the PJSIP runtime (endpoint + UDP/TCP/TLS transports; TLS
+/// verifies against system trust unless a per-account override recreates
+/// it) on the engine thread. Idempotent: starting a started engine
+/// reports no error. port 0 = ephemeral local SIP port. useNullAudio
+/// replaces the sound device with PJSIP's null device (integration tests
+/// only — keeps media flowing without microphone/TCC involvement).
+/// Contract: call stopWithCompletion: before releasing a started engine.
 - (void)startWithUserAgent:(NSString *)userAgent
                       port:(NSInteger)port
               useNullAudio:(BOOL)useNullAudio

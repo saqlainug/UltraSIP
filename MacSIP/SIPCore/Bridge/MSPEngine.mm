@@ -250,6 +250,12 @@ class BridgeAccount : public pj::Account {
 }
 
 - (void)dealloc {
+    // Contract (MSPEngine.h): stop before release. Deallocating a started
+    // engine would run libDestroy on the deallocating thread (F5).
+    NSAssert(!_core.started, @"MSPEngine deallocated while started — call stopWithCompletion: first");
+    if (_core.started) {
+        NSLog(@"[MSPEngine] ERROR: deallocated while started; PJSIP teardown on wrong thread");
+    }
     [_worker cancel];
 }
 
@@ -258,7 +264,16 @@ class BridgeAccount : public pj::Account {
 - (void)onEngine:(dispatch_block_t)block {
     [_worker async:^{
         macsip::ensureThreadRegisteredIfStarted();
-        block();
+        try {
+            block();
+        } catch (const std::exception &e) {
+            // Non-PJSIP C++ exceptions must never cross into ObjC/Swift
+            // (security review F7). Completion-bearing sites also catch
+            // std::exception themselves so continuations still resume.
+            NSLog(@"[MSPEngine] engine block threw std::exception: %s", e.what());
+        } catch (...) {
+            NSLog(@"[MSPEngine] engine block threw unknown C++ exception");
+        }
     }];
 }
 
@@ -346,11 +361,31 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             dispatch_async(self->_delegateQueue, ^{ completion(nil); });
         } catch (const pj::Error &e) {
             NSError *error = MSPErrorFromPJ(e);
-            self->_core.endpoint.reset();
-            self->_core.started = false;
+            [self resetCoreAfterFailedStart];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        } catch (const std::exception &e) {
+            NSError *error = [NSError errorWithDomain:MSPErrorDomain
+                                                 code:-10
+                                             userInfo:@{
+                                                 NSLocalizedDescriptionKey :
+                                                     [NSString stringWithFormat:@"SIP stack failure: %s", e.what()]
+                                             }];
+            [self resetCoreAfterFailedStart];
             dispatch_async(self->_delegateQueue, ^{ completion(error); });
         }
     }];
+}
+
+/// Engine thread only. Clears ALL core state after a failed start —
+/// including the PJLIB-ready flag and TLS transport bookkeeping, which
+/// must never survive an endpoint's lifetime (security review F2/F6).
+- (void)resetCoreAfterFailedStart {
+    macsip::g_pjlibReady.store(false, std::memory_order_release);
+    self->_core.endpoint.reset();
+    self->_core.started = false;
+    self->_core.tlsTransportId = -1;
+    self->_core.tlsAvailable = false;
+    self->_core.tlsVerifyDisabled = false;
 }
 
 - (void)stopWithCompletion:(void (^)(void))completion {
@@ -375,6 +410,10 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             }
             self->_core.endpoint.reset();
             self->_core.started = false;
+            // Transport IDs must never outlive their endpoint (F2).
+            self->_core.tlsTransportId = -1;
+            self->_core.tlsAvailable = false;
+            self->_core.tlsVerifyDisabled = false;
         }
         dispatch_async(self->_delegateQueue, ^{ completion(); });
     }];
@@ -435,10 +474,24 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             dispatch_async(self->_delegateQueue, ^{ completion(error); });
             return;
         }
+        // Reconfiguring destroys the current account, and BridgeCall
+        // objects reference it — refuse outright while calls are live
+        // (teardown order: calls before accounts; security review F1/F4).
+        // This also guarantees a TLS-verification change is never
+        // silently skipped.
+        if (!self->_core.calls.empty()) {
+            NSError *error = [NSError
+                errorWithDomain:MSPErrorDomain
+                           code:-4
+                       userInfo:@{
+                           NSLocalizedDescriptionKey : @"End active calls before changing account settings"
+                       }];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
         try {
             self->_core.account.reset();  // replace: unregister + delete old
-            if (usesTLS && self->_core.tlsVerifyDisabled != (bool)tlsVerifyDisabled
-                && self->_core.calls.empty()) {
+            if (usesTLS && self->_core.tlsVerifyDisabled != (bool)tlsVerifyDisabled) {
                 [self createTLSTransportVerifyDisabled:tlsVerifyDisabled];
             }
             pj::AccountConfig accountConfig;
@@ -471,12 +524,31 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
         } catch (const pj::Error &e) {
             NSError *error = MSPErrorFromPJ(e);
             dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        } catch (const std::exception &e) {
+            NSError *error = [NSError errorWithDomain:MSPErrorDomain
+                                                 code:-10
+                                             userInfo:@{
+                                                 NSLocalizedDescriptionKey :
+                                                     [NSString stringWithFormat:@"SIP stack failure: %s", e.what()]
+                                             }];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
         }
     }];
 }
 
 - (void)removeAccountWithCompletion:(void (^)(void))completion {
     [self onEngine:^{
+        // Account removal is deliberate teardown: calls first (rule 4).
+        for (auto &pair : self->_core.calls) {
+            try {
+                pj::CallOpParam prm;
+                pair.second->hangup(prm);
+            } catch (const pj::Error &) {
+            }
+            delete pair.second;
+        }
+        self->_core.calls.clear();
+        self->_core.mutedCalls.clear();
         self->_core.account.reset();
         if (completion) dispatch_async(self->_delegateQueue, ^{ completion(); });
     }];
@@ -648,7 +720,11 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
         } else {
             try {
                 [info appendFormat:@"PJSIP: %s\n", self->_core.endpoint->libVersion().full.c_str()];
-                [info appendString:@"Transport: UDP (ephemeral port)\nCodecs:\n"];
+                [info appendFormat:@"Transports: UDP, TCP, TLS %s\nCodecs:\n",
+                                   self->_core.tlsAvailable
+                                       ? (self->_core.tlsVerifyDisabled ? "(verification OFF — insecure override)"
+                                                                        : "(system trust)")
+                                       : "(unavailable)"];
                 for (const auto &codec : self->_core.endpoint->codecEnum2()) {
                     [info appendFormat:@"  %s (priority %d)\n", codec.codecId.c_str(), (int)codec.priority];
                 }

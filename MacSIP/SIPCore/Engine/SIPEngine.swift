@@ -203,18 +203,24 @@ final class SIPEngine: NSObject {
 }
 
 extension SIPEngine: MSPEngineDelegate {
+    // Events hop via DispatchQueue.main (FIFO), NOT independent Tasks:
+    // unordered delivery could interleave a disconnect with a new incoming
+    // call on a reused PJSUA call id (security review F8).
+    nonisolated private func deliver(_ event: Event) {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { self.onEvent?(event) }
+        }
+    }
+
     nonisolated func sipEngineRegistrationChanged(_ event: MSPRegistrationEvent) {
-        let state = Self.registrationState(from: event)
-        Task { @MainActor in self.onEvent?(.registration(state)) }
+        deliver(.registration(Self.registrationState(from: event)))
     }
 
     nonisolated func sipEngineCallChanged(_ event: MSPCallEvent) {
-        let update = Self.callUpdate(from: event)
-        Task { @MainActor in self.onEvent?(.callChanged(update)) }
+        deliver(.callChanged(Self.callUpdate(from: event)))
     }
 
     nonisolated func sipEngineIncomingCall(_ event: MSPCallEvent) {
-        let update = Self.callUpdate(from: event)
-        Task { @MainActor in self.onEvent?(.incomingCall(update)) }
+        deliver(.incomingCall(Self.callUpdate(from: event)))
     }
 }

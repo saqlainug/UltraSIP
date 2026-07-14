@@ -5,6 +5,7 @@ import Foundation
 nonisolated struct PersistenceStack {
     let accounts: any AccountStoring
     let history: any HistoryStoring
+    let settings: any SettingsStoring
 
     static func open(at path: String? = nil) throws -> PersistenceStack {
         let databasePath: String
@@ -20,6 +21,8 @@ nonisolated struct PersistenceStack {
         }
         let db = try Database(path: databasePath)
         try Migrations.migrate(db)
-        return PersistenceStack(accounts: AccountRepository(db: db), history: HistoryRepository(db: db))
+        return PersistenceStack(
+            accounts: AccountRepository(db: db), history: HistoryRepository(db: db),
+            settings: SettingsRepository(db: db))
     }
 }

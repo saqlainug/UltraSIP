@@ -47,6 +47,20 @@ nonisolated enum Migrations {
             ALTER TABLE accounts ADD COLUMN tls_verify_disabled INTEGER NOT NULL DEFAULT 0;
             """
         ),
+        (
+            3,
+            """
+            CREATE TABLE app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            ALTER TABLE accounts ADD COLUMN stun_server TEXT NOT NULL DEFAULT '';
+            ALTER TABLE accounts ADD COLUMN ice_enabled INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE accounts ADD COLUMN turn_server TEXT NOT NULL DEFAULT '';
+            ALTER TABLE accounts ADD COLUMN turn_username TEXT NOT NULL DEFAULT '';
+            ALTER TABLE accounts ADD COLUMN turn_password_ref TEXT NOT NULL DEFAULT '';
+            """
+        ),
     ]
 
     static var latestVersion: Int { all.map(\.version).max() ?? 0 }

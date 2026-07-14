@@ -47,15 +47,20 @@ final class PersistenceTests: XCTestCase {
             let columns = try db.query("PRAGMA table_info(\(table))")
                 .compactMap { $0["name"]?.textValue?.lowercased() }
             for column in columns {
+                // "*_ref" columns are opaque Keychain references — the
+                // sanctioned mechanism (CLAUDE.md). Anything else that
+                // smells like a secret is forbidden.
+                if column.hasSuffix("_ref") { continue }
                 XCTAssertFalse(
                     column.contains("password") || column.contains("secret") || column == "credential",
                     "table \(table) has forbidden column \(column)")
             }
         }
-        // The Keychain reference column must exist instead.
+        // The Keychain reference columns must exist instead.
         let accountColumns = try db.query("PRAGMA table_info(accounts)")
             .compactMap { $0["name"]?.textValue }
         XCTAssertTrue(accountColumns.contains("keychain_ref"))
+        XCTAssertTrue(accountColumns.contains("turn_password_ref"))
     }
 
     // MARK: Accounts

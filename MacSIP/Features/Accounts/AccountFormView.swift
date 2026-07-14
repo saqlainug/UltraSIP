@@ -47,6 +47,18 @@ struct AccountFormView: View {
             .formStyle(.columns)
             .textFieldStyle(.roundedBorder)
 
+            if mediaEncryption != .none, transport != .tls {
+                Label(
+                    "SRTP keys travel in cleartext SDP without TLS signaling — use TLS transport for confidential media",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .accessibilityLabel(
+                    "Warning: SRTP keys travel in cleartext without TLS signaling. Use TLS transport for confidential media"
+                )
+            }
+
             if transport == .tls {
                 Toggle(isOn: $tlsVerificationDisabled) {
                     VStack(alignment: .leading, spacing: 1) {

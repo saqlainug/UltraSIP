@@ -15,11 +15,13 @@ services:
     container_name: macsip-testpbx
     restart: unless-stopped
     # SIP + a narrow RTP range; host networking is unavailable on macOS.
+    # Loopback-only: tests target 127.0.0.1, and the throwaway credentials
+    # must not be reachable from the LAN (security review F10).
     ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "5061:5061/tcp"
-      - "10000-10020:10000-10020/udp"
+      - "127.0.0.1:5060:5060/udp"
+      - "127.0.0.1:5060:5060/tcp"
+      - "127.0.0.1:5061:5061/tcp"
+      - "127.0.0.1:10000-10020:10000-10020/udp"
     volumes:
       - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf:ro
       - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro

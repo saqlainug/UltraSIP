@@ -110,6 +110,12 @@ final class AppModel: ObservableObject {
     /// Saves the account. `newPassword` nil/empty = keep the stored secret
     /// (SPEC §1: existing passwords are never displayed back on edit).
     func saveAccount(_ config: SIPAccountConfig, newPassword: String?) async {
+        // Reconfiguring tears down the SIP account; the bridge refuses with
+        // calls up (F1/F4) — surface the friendly message first.
+        guard activeCalls.isEmpty, incomingCalls.isEmpty else {
+            lastError = "End active calls before changing account settings"
+            return
+        }
         var config = config
         let validationErrors = config.validate()
         guard validationErrors.isEmpty else {
