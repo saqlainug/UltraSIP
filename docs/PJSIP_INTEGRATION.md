@@ -72,9 +72,9 @@ collapse a silent stream to a single 2-byte SID frame, which strict
 gateways treat as dead RTP; continuous media is the parity behavior until
 a codec-settings UI exposes the toggle.
 
-Interop debugging: DEBUG builds honor `MACSIP_SIP_TRACE=1` (environment)
-to raise the PJSIP log level to 5 — full SIP traces incl. SDP, console
-only, opt-in per launch. Not compiled into release builds (traces carry
+Interop debugging: DEBUG builds run at PJSIP log level 5 by default —
+full SIP traces incl. SDP, console only (`MACSIP_NO_SIP_TRACE=1` in the
+environment quiets a run). Not compiled into release builds (traces carry
 Authorization headers).
 
 ## Linking (Milestone 1)

@@ -330,16 +330,18 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             config.logConfig.level = 3;
             config.logConfig.consoleLevel = 3;
 #ifdef DEBUG
-            // Diagnostics escape hatch, DEBUG builds only: full SIP trace
-            // to the console for interop debugging (SDP offers/answers).
-            // Opt-in per launch; NEVER available in release builds because
-            // traces contain Authorization headers.
-            if (getenv("MACSIP_SIP_TRACE") != nullptr) {
+            // DEBUG builds always run the FULL SIP trace (level 5) on the
+            // console — SDP offers/answers are the #1 interop-debugging
+            // need, and env-var opt-in proved too fragile (Xcode scheme
+            // state). Traces carry Authorization/digest headers, so this
+            // block is compiled out of Release entirely (CLAUDE.md
+            // redaction rules). MACSIP_NO_SIP_TRACE=1 quiets a Debug run.
+            if (getenv("MACSIP_NO_SIP_TRACE") == nullptr) {
                 config.logConfig.level = 5;
                 config.logConfig.consoleLevel = 5;
                 PJ_LOG(1, ("MSPEngine",
-                           "MACSIP_SIP_TRACE: FULL SIP TRACE ON — console will contain "
-                           "credentials/digest material. Debug builds only."));
+                           "FULL SIP TRACE ON (DEBUG default) — console will contain "
+                           "credentials/digest material. MACSIP_NO_SIP_TRACE=1 disables."));
             }
 #endif
             config.uaConfig.userAgent = ua;
