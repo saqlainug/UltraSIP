@@ -79,6 +79,18 @@ extern NSErrorDomain const MSPErrorDomain;
 - (void)statsForCall:(NSInteger)callId
           completion:(void (^)(NSInteger txPackets, NSInteger rxPackets))completion;
 
+/// Audio devices as {index: NSNumber, name: NSString, input: BOOL,
+/// output: BOOL} dictionaries, plus the currently selected indices
+/// (-1 = system default).
+- (void)audioDevicesWithCompletion:(void (^)(NSArray<NSDictionary *> *devices,
+                                             NSInteger captureIndex,
+                                             NSInteger playbackIndex))completion;
+
+/// Selects audio devices (-1 = follow system default). Safe mid-call.
+- (void)setCaptureDevice:(NSInteger)captureIndex
+           playbackDevice:(NSInteger)playbackIndex
+               completion:(void (^)(NSError *_Nullable error))completion;
+
 /// Sanitized runtime diagnostics (versions, transport, codecs, account
 /// state). Never contains credentials.
 - (void)diagnosticsWithCompletion:(void (^)(NSString *info))completion;

@@ -768,6 +768,59 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
     }];
 }
 
+#pragma mark Audio devices
+
+- (void)audioDevicesWithCompletion:(void (^)(NSArray<NSDictionary *> *, NSInteger, NSInteger))completion {
+    [self onEngine:^{
+        NSMutableArray<NSDictionary *> *devices = [NSMutableArray array];
+        NSInteger capture = -1;
+        NSInteger playback = -1;
+        if (self->_core.started) {
+            try {
+                auto &manager = self->_core.endpoint->audDevManager();
+                const auto list = manager.enumDev2();
+                for (const auto &info : list) {
+                    [devices addObject:@{
+                        @"index" : @(info.id),
+                        @"name" : [NSString stringWithUTF8String:info.name.c_str()] ?: @"",
+                        @"input" : @(info.inputCount > 0),
+                        @"output" : @(info.outputCount > 0),
+                    }];
+                }
+                capture = manager.getCaptureDev();
+                playback = manager.getPlaybackDev();
+            } catch (const pj::Error &e) {
+                PJ_LOG(2, ("MSPEngine", "audio device enumeration failed: %s", e.reason.c_str()));
+            }
+        }
+        NSArray<NSDictionary *> *result = [devices copy];
+        dispatch_async(self->_delegateQueue, ^{ completion(result, capture, playback); });
+    }];
+}
+
+- (void)setCaptureDevice:(NSInteger)captureIndex
+          playbackDevice:(NSInteger)playbackIndex
+              completion:(void (^)(NSError *_Nullable))completion {
+    [self onEngine:^{
+        if (!self->_core.started) {
+            NSError *error = [NSError errorWithDomain:MSPErrorDomain
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey : @"Engine not started"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
+        try {
+            // PJSUA treats -1 as "system default" for both directions.
+            self->_core.endpoint->audDevManager().setCaptureDev((int)captureIndex);
+            self->_core.endpoint->audDevManager().setPlaybackDev((int)playbackIndex);
+            dispatch_async(self->_delegateQueue, ^{ completion(nil); });
+        } catch (const pj::Error &e) {
+            NSError *error = MSPErrorFromPJ(e);
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        }
+    }];
+}
+
 #pragma mark Diagnostics
 
 - (void)diagnosticsWithCompletion:(void (^)(NSString *))completion {

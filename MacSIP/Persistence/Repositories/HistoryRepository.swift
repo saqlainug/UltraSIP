@@ -3,6 +3,7 @@ import Foundation
 nonisolated protocol HistoryStoring {
     func append(_ entry: CallHistoryEntry) throws
     func recent(limit: Int) throws -> [CallHistoryEntry]
+    func delete(id: UUID) throws
     func deleteAll() throws
 }
 
@@ -55,6 +56,10 @@ nonisolated final class HistoryRepository: HistoryStoring {
                 outcome: outcome,
                 rawSIPCode: row["raw_sip_code"]?.intValue.map(Int.init))
         }
+    }
+
+    func delete(id: UUID) throws {
+        try db.execute("DELETE FROM call_history WHERE id = ?", [.text(id.uuidString)])
     }
 
     func deleteAll() throws {

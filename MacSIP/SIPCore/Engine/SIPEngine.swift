@@ -182,6 +182,38 @@ final class SIPEngine: NSObject {
         }
     }
 
+    // MARK: Audio devices
+
+    func audioDevices() async -> (devices: [AudioDevice], captureIndex: Int, playbackIndex: Int) {
+        await withCheckedContinuation {
+            (continuation: CheckedContinuation<(devices: [AudioDevice], captureIndex: Int, playbackIndex: Int), Never>)
+            in
+            bridge.audioDevices { raw, capture, playback in
+                let devices = raw.compactMap { entry -> AudioDevice? in
+                    guard let index = entry["index"] as? Int, let name = entry["name"] as? String
+                    else { return nil }
+                    return AudioDevice(
+                        index: index, name: name,
+                        isInput: (entry["input"] as? Bool) ?? false,
+                        isOutput: (entry["output"] as? Bool) ?? false)
+                }
+                continuation.resume(returning: (devices, capture, playback))
+            }
+        }
+    }
+
+    func setAudioDevices(captureIndex: Int, playbackIndex: Int) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            bridge.setCaptureDevice(captureIndex, playbackDevice: playbackIndex) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
     // MARK: Translation (bridge thread → Sendable values → main actor)
 
     private nonisolated static func registrationState(from event: MSPRegistrationEvent) -> RegistrationState {

@@ -11,6 +11,11 @@ nonisolated protocol SettingsStoring {
 nonisolated final class SettingsRepository: SettingsStoring {
     enum Key {
         static let activeAccountID = "active_account_id"
+        static let doNotDisturb = "do_not_disturb"
+        static let lastDialed = "last_dialed"
+        static let captureDevice = "capture_device"
+        static let playbackDevice = "playback_device"
+        static let hideToMenuBar = "hide_to_menu_bar"
     }
 
     private let db: Database

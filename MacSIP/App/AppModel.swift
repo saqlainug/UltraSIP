@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -22,6 +23,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var activeAccountID: UUID?
     @Published var lastError: String?
     @Published var showAccountForm = false
+    /// Do Not Disturb (SPEC §8): incoming calls are rejected as busy and
+    /// recorded as missed. Persisted.
+    @Published private(set) var doNotDisturb = false
+    @Published private(set) var launchAtLogin = false
+    @Published private(set) var lastDialedNumber: String?
+    @Published private(set) var audioDevices: [AudioDevice] = []
+    @Published private(set) var captureDeviceIndex = AudioDevice.systemDefaultIndex
+    @Published private(set) var playbackDeviceIndex = AudioDevice.systemDefaultIndex
 
     var account: SIPAccountConfig? {
         guard let activeAccountID else { return nil }
@@ -65,6 +74,14 @@ final class AppModel: ObservableObject {
                 activeAccountID = accounts.first?.id
             }
             history = try stack.history.recent(limit: 50)
+            doNotDisturb = (try stack.settings.value(for: SettingsRepository.Key.doNotDisturb)) == "1"
+            lastDialedNumber = try stack.settings.value(for: SettingsRepository.Key.lastDialed)
+            captureDeviceIndex =
+                Int(try stack.settings.value(for: SettingsRepository.Key.captureDevice) ?? "")
+                ?? AudioDevice.systemDefaultIndex
+            playbackDeviceIndex =
+                Int(try stack.settings.value(for: SettingsRepository.Key.playbackDevice) ?? "")
+                ?? AudioDevice.systemDefaultIndex
         } catch {
             // App remains usable without persistence; state is session-only.
             lastError = "Storage unavailable: \(error.localizedDescription)"
@@ -90,6 +107,59 @@ final class AppModel: ObservableObject {
         // Re-register the persisted active account from the last session.
         await configureEngineForActiveAccount()
         startRecoveryMonitors()
+        await refreshAudioDevices()
+        launchAtLogin = LaunchAtLogin.isEnabled
+        // Re-apply the stored device selection to the fresh engine.
+        if captureDeviceIndex != AudioDevice.systemDefaultIndex
+            || playbackDeviceIndex != AudioDevice.systemDefaultIndex
+        {
+            try? await engine.setAudioDevices(
+                captureIndex: captureDeviceIndex, playbackIndex: playbackDeviceIndex)
+        }
+    }
+
+    // MARK: Settings (SPEC §22 subset shipped with M3)
+
+    func setDoNotDisturb(_ enabled: Bool) {
+        doNotDisturb = enabled
+        persistSetting(enabled ? "1" : "0", for: SettingsRepository.Key.doNotDisturb)
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            try LaunchAtLogin.set(enabled)
+            launchAtLogin = LaunchAtLogin.isEnabled
+        } catch {
+            lastError = "Could not change launch at login: \(error.localizedDescription)"
+            launchAtLogin = LaunchAtLogin.isEnabled
+        }
+    }
+
+    func refreshAudioDevices() async {
+        let result = await engine.audioDevices()
+        audioDevices = result.devices
+    }
+
+    func selectAudioDevices(capture: Int, playback: Int) async {
+        do {
+            try await engine.setAudioDevices(captureIndex: capture, playbackIndex: playback)
+            captureDeviceIndex = capture
+            playbackDeviceIndex = playback
+            persistSetting(String(capture), for: SettingsRepository.Key.captureDevice)
+            persistSetting(String(playback), for: SettingsRepository.Key.playbackDevice)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func persistSetting(_ value: String, for key: String) {
+        guard let persistence else { return }
+        do {
+            try persistence.settings.set(value, for: key)
+        } catch {
+            Self.log.error("Persisting \(key, privacy: .public) failed")
+        }
     }
 
     /// Fetches secrets transiently and (re)configures the engine for the
@@ -255,10 +325,47 @@ final class AppModel: ObservableObject {
                         state: .dialing, muted: false, mediaActive: false,
                         startedAt: Date(), connectedAt: nil, endedAt: nil)
                 }
+                lastDialedNumber = input.trimmingCharacters(in: .whitespaces)
+                persistSetting(lastDialedNumber ?? "", for: SettingsRepository.Key.lastDialed)
                 lastError = nil
             } catch {
                 lastError = error.localizedDescription
             }
+        }
+    }
+
+    /// Redial the last dialed destination (SPEC §3).
+    func redial() async {
+        guard let number = lastDialedNumber, !number.isEmpty else { return }
+        await dial(number)
+    }
+
+    // MARK: History management (SPEC §18)
+
+    func deleteHistoryEntry(_ id: UUID) async {
+        history.removeAll { $0.id == id }
+        guard let persistence else { return }
+        do {
+            try persistence.history.delete(id: id)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func clearHistory() async {
+        let alert = NSAlert()
+        alert.messageText = "Clear all call history?"
+        alert.informativeText = "This permanently deletes every entry. It cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear History")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        history.removeAll()
+        guard let persistence else { return }
+        do {
+            try persistence.history.deleteAll()
+        } catch {
+            lastError = error.localizedDescription
         }
     }
 
@@ -326,10 +433,18 @@ final class AppModel: ObservableObject {
             registrationState = newState
         case .incomingCall(let update):
             guard calls[update.id] == nil else { return }
-            calls[update.id] = CallSnapshot(
+            let snapshot = CallSnapshot(
                 id: update.id, direction: .incoming, remoteURI: update.remoteURI,
                 remoteDisplayName: update.remoteDisplayName, state: .incomingRinging,
                 muted: false, mediaActive: false, startedAt: Date(), connectedAt: nil, endedAt: nil)
+            // DND (SPEC §8): reject as busy, but still record the missed
+            // call — the user must be able to see who called.
+            if doNotDisturb {
+                calls[update.id] = snapshot
+                engine.reject(update.id, busy: true)
+                return
+            }
+            calls[update.id] = snapshot
         case .callChanged(let update):
             apply(update)
         }

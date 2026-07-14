@@ -27,9 +27,18 @@ these verified from CI). Record date + hardware when performing one.
 |---|---|---|---|
 | Trusted-CA happy path | Install TestPBX CA (`TestPBX/asterisk/keys/ca.crt`) as trusted in a THROWAWAY macOS user/VM keychain, register with TLS + verification ON | Registers without the insecure override | Not verified |
 
-## UI (pre-gate-2 baseline)
+## UI (Milestone 3)
 
 | Item | Procedure | Expected | Last verified |
 |---|---|---|---|
-| VoiceOver pass over M1 views | VO-navigate account form, dialer, in-call, incoming banner | All controls labeled; states announced | Not verified |
-| Multi-monitor window placement | Move window across displays | No jumping; remembered position | Not verified |
+| Main window renders to spec | Launch app | 360×560 pt; header/tabs/footer; dark + light | **2026-07-14 (dark mode, screenshot)** |
+| Incoming-call panel | Call this client from the TestPBX (or another softphone) while another app has focus | Panel appears top-right, floats above other apps, does NOT steal keyboard focus, survives Space switch; Answer/Busy/Decline work; ↩/⎋ shortcuts | Not verified |
+| Multiple ringing calls | Two simultaneous inbound calls | Panels stack downward, 8 pt gap; each answers independently | Not verified |
+| DND | Enable DND (footer or menu bar), then call in | Caller gets busy; call appears in history as missed; no panel shown | Not verified |
+| Menu bar extra | Click icon in menu bar | Icon reflects state (registered/on-call/DND); menu shows status, account switch, Dial, active-call controls, recent calls, DND, Settings, Quit | Not verified |
+| Quit with active call | ⌘Q during a call | Warning sheet appears; Cancel keeps the call | Not verified |
+| Launch at login | Toggle in Settings → General | Item appears in System Settings → General → Login Items (ad-hoc dev builds may need approval there) | Not verified |
+| Audio device selection | Settings → Audio; pick a specific mic/speaker; make a call | Chosen device is used; selection persists across restart | Not verified |
+| VoiceOver pass | VO-navigate header, tabs, keypad, in-call controls, incoming panel | All controls labeled; call/registration state announced | Not verified |
+| Light mode | Switch macOS appearance to Light | Contrast holds; no hard-coded colors | Not verified |
+| Multi-monitor panel placement | Ring with the app on a second display | Panel lands on the screen with keyboard focus | Not verified |
