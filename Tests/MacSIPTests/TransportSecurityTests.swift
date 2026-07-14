@@ -79,7 +79,7 @@ final class TransportSecurityTests: XCTestCase {
     // MARK: Transports
 
     func testTCPRegistration() async throws {
-        try await configure(user: "101", password: "test101pw", transport: .tcp)  // secretscan:allow throwaway TestPBX cred
+        try await configure(user: "101", password: "test101pw", transport: .tcp)  // secretscan:allow TestPBX cred
         let state = try await waitForRegistration(timeout: 15) {
             if case .registered = $0 { return true }
             return false
@@ -90,7 +90,7 @@ final class TransportSecurityTests: XCTestCase {
     /// SPEC §2 / CLAUDE.md: TLS verification is ON by default and must
     /// reject the TestPBX's self-signed certificate.
     func testTLSRejectsUntrustedCertificateByDefault() async throws {
-        try await configure(user: "101", password: "test101pw", transport: .tls)  // secretscan:allow throwaway TestPBX cred
+        try await configure(user: "101", password: "test101pw", transport: .tls)  // secretscan:allow TestPBX cred
         let state = try await waitForRegistration(timeout: 20) {
             if case .failed = $0 { return true }
             return false
@@ -109,7 +109,8 @@ final class TransportSecurityTests: XCTestCase {
     /// proof that encrypted signaling works end-to-end once trusted.
     func testTLSWithVisibleInsecureOverrideRegisters() async throws {
         try await configure(
-            user: "101", password: "test101pw", transport: .tls, tlsVerificationDisabled: true)  // secretscan:allow throwaway TestPBX cred
+            user: "101", password: "test101pw",  // secretscan:allow TestPBX cred
+            transport: .tls, tlsVerificationDisabled: true)
         let state = try await waitForRegistration(timeout: 20) {
             if case .registered = $0 { return true }
             return false
@@ -122,14 +123,14 @@ final class TransportSecurityTests: XCTestCase {
     /// Reconfiguring to a different account on the RUNNING engine must
     /// re-register as the new identity — no engine restart involved.
     func testAccountSwitchWithoutRestart() async throws {
-        try await configure(user: "101", password: "test101pw", transport: .udp)  // secretscan:allow throwaway TestPBX cred
+        try await configure(user: "101", password: "test101pw", transport: .udp)  // secretscan:allow TestPBX cred
         _ = try await waitForRegistration(timeout: 15) {
             if case .registered = $0 { return true }
             return false
         }
 
         registrations.removeAll()
-        try await configure(user: "102", password: "test102pw", transport: .udp)  // secretscan:allow throwaway TestPBX cred
+        try await configure(user: "102", password: "test102pw", transport: .udp)  // secretscan:allow TestPBX cred
         let state = try await waitForRegistration(timeout: 15) {
             if case .registered = $0 { return true }
             return false
@@ -157,7 +158,7 @@ final class TransportSecurityTests: XCTestCase {
         try await engine.configureAccount(
             SIPAccountConfig(
                 label: "ice", domain: Self.pbxHost, username: "102", iceEnabled: true),
-            password: "test102pw")  // secretscan:allow throwaway TestPBX cred
+            password: "test102pw")  // secretscan:allow TestPBX cred
         _ = try await waitForRegistration(timeout: 15) {
             if case .registered = $0 { return true }
             return false
@@ -187,7 +188,8 @@ final class TransportSecurityTests: XCTestCase {
     /// never silently fall back to clear RTP.
     func testSRTPMandatoryFailsAgainstPlainEndpoint() async throws {
         try await configure(
-            user: "101", password: "test101pw", transport: .udp, encryption: .srtpMandatory)  // secretscan:allow throwaway TestPBX cred
+            user: "101", password: "test101pw",  // secretscan:allow TestPBX cred
+            transport: .udp, encryption: .srtpMandatory)
         _ = try await waitForRegistration(timeout: 15) {
             if case .registered = $0 { return true }
             return false

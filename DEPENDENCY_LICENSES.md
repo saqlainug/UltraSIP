@@ -34,6 +34,20 @@ Bundled `third_party/` components compiled into our static build
 | WebRTC AEC | BSD-3-Clause | Echo cancellation |
 | resample | LGPL-derived (permissive terms per pjsip distribution) | Verify exact text before first binary release |
 
+### bcg729 (G.729A/B codec) 1.1.1
+
+| Field | Value |
+|---|---|
+| Version / tag | 1.1.1 |
+| Source | https://github.com/BelledonneCommunications/bcg729/archive/refs/tags/1.1.1.tar.gz (Belledonne Communications) |
+| SHA-256 | `68599a850535d1b182932b3f86558ac8a76d4b899a548183b062956c5fdc916d` (computed from two independent downloads, 2026-07-14) |
+| License | GPL-3.0 (LICENSE.txt verified in the pinned archive) — same license as the project |
+| Patent notes | G.729 patents expired by ~2017 (pool administrator confirmation cited in bcg729 README; RESEARCH_BASELINE §4). bcg729 is a from-scratch implementation, not ITU reference code. |
+| Transitive | None (pure ANSI C, self-contained) |
+| Build | Compiled per-arch directly with clang in `scripts/build-pjsip.sh` (no cmake dependency); static lib linked into PJSIP via `--with-bcg729` |
+| Reproducibility | Same pin/checksum/flags mechanism as pjproject; recorded in BUILD_INFO.txt |
+| Decision | **Adopted 2026-07-14** — required for interop with G.729-only switches (user-hit SDP negotiation failure) |
+
 ### GNU GPLv3 text
 
 LICENSE fetched verbatim from https://www.gnu.org/licenses/gpl-3.0.txt
@@ -44,7 +58,7 @@ LICENSE fetched verbatim from https://www.gnu.org/licenses/gpl-3.0.txt
 | Candidate | License | Verdict (2026-07-13) |
 |---|---|---|
 | libopus (Opus) | BSD-3 + patent grants | **Approved for adoption** in the codec milestone via `--with-opus` + fresh dependency-review at the pinned libopus version |
-| bcg729 (G.729A/B) | GPLv3 (or commercial) | **Approved for adoption** later via `--with-bcg729`; from-scratch implementation; G.729 patents expired ~2017 |
+| bcg729 (G.729A/B) | GPLv3 (or commercial) | **ADOPTED 2026-07-14** — see the pinned entry above |
 | libvpx (VP8/VP9) | BSD-3 + WebM patent grant | **Approved for adoption** at Milestone 6 via `--with-vpx` |
 | Apple VideoToolbox (H.264) | OS framework (GPLv3 System Library exception) | **Planned** for Milestone 6; no codec code bundled; note: "OS-codec patent coverage" is the industry-standard position, not legally tested |
 | opencore-amr / vo-amrwbenc (AMR/AMR-WB) | Apache-2.0 | **Deferred — do not bundle.** Copyright-clean, but no authoritative patent-pool-closure statement located (Wikipedia claims ~2024 expiry). Revisit with confirmed terms only. |

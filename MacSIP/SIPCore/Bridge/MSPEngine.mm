@@ -329,7 +329,26 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             // Authorization headers — CLAUDE.md redaction rules).
             config.logConfig.level = 3;
             config.logConfig.consoleLevel = 3;
+#ifdef DEBUG
+            // Diagnostics escape hatch, DEBUG builds only: full SIP trace
+            // to the console for interop debugging (SDP offers/answers).
+            // Opt-in per launch; NEVER available in release builds because
+            // traces contain Authorization headers.
+            if (getenv("MACSIP_SIP_TRACE") != nullptr) {
+                config.logConfig.level = 5;
+                config.logConfig.consoleLevel = 5;
+                PJ_LOG(1, ("MSPEngine",
+                           "MACSIP_SIP_TRACE: FULL SIP TRACE ON — console will contain "
+                           "credentials/digest material. Debug builds only."));
+            }
+#endif
             config.uaConfig.userAgent = ua;
+            // VAD off = MicroSIP default. PJSUA's default (VAD on) makes
+            // G.729 Annex B DTX collapse a silent stream to a single SID
+            // frame, which strict gateways treat as dead RTP; continuous
+            // media is the parity behavior until a codec-settings UI
+            // exposes this.
+            config.medConfig.noVad = true;
             self->_core.endpoint->libInit(config);
             pj::TransportConfig transport;
             transport.port = (unsigned)port;  // 0 = ephemeral
@@ -356,11 +375,14 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             if (useNullAudio) {
                 self->_core.endpoint->audDevManager().setNullDev();
             }
-            // Default codec policy = MicroSIP-parity (PCMU/PCMA enabled;
-            // G722 kept for wideband). Everything else disabled until the
-            // codec-settings milestone. Side benefit: compact SDP keeps
-            // INVITEs under the RFC 3261 UDP size threshold — oversized
-            // SIP datagrams do not survive some NAT/proxy paths.
+            // Default codec policy: PCMU/PCMA (MicroSIP parity), G722
+            // (wideband), G729 (bcg729 — GSM-termination switches are
+            // frequently G.729-only; a missing G729 answer causes
+            // PJMEDIA_SDPNEG_ENOMEDIA and an instant disconnect).
+            // Everything else disabled until the codec-settings milestone.
+            // Compact SDP also keeps INVITEs under the RFC 3261 UDP size
+            // threshold — oversized SIP datagrams do not survive some
+            // NAT/proxy paths.
             for (const auto &codec : self->_core.endpoint->codecEnum2()) {
                 unsigned priority = 0;
                 if (codec.codecId.rfind("PCMU/", 0) == 0) {
@@ -369,6 +391,8 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
                     priority = 190;
                 } else if (codec.codecId.rfind("G722/", 0) == 0) {
                     priority = 180;
+                } else if (codec.codecId.rfind("G729/", 0) == 0) {
+                    priority = 170;
                 }
                 self->_core.endpoint->codecSetPriority(codec.codecId, (pj_uint8_t)priority);
             }

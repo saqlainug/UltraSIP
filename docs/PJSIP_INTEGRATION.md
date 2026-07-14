@@ -57,9 +57,25 @@ added for this. Revisiting the decision is approval-gated.
 `--disable-video --disable-ffmpeg --disable-openh264 --disable-vpx
 --disable-v4l2 --disable-sdl --disable-opus --disable-opencore-amr`
 
-Compiled-in codecs: PCMU/PCMA, G.722, GSM, iLBC, Speex (+ L16 and G.722.1
-present but disabled by default at runtime; G.722.1 stays disabled —
-licensing). Opus/bcg729/libvpx are later, approval-gated additions.
+Compiled-in codecs: PCMU/PCMA, G.722, GSM, iLBC, Speex, and **G.729 via
+bcg729 1.1.1** (adopted 2026-07-14 — GSM-termination switches are often
+G.729-only; bcg729 is compiled per-arch with plain clang, no cmake, and
+linked via `--with-bcg729`). L16 and G.722.1 remain disabled at runtime
+(G.722.1 for licensing). Opus/libvpx are later additions.
+
+Runtime-enabled priority order: PCMU (200) > PCMA (190) > G722 (180) >
+G729 (170); all other compiled codecs are priority 0.
+
+VAD/silence suppression is OFF endpoint-wide (`medConfig.noVad = true`) —
+MicroSIP's default. PJSUA's default (VAD on) makes G.729 Annex B DTX
+collapse a silent stream to a single 2-byte SID frame, which strict
+gateways treat as dead RTP; continuous media is the parity behavior until
+a codec-settings UI exposes the toggle.
+
+Interop debugging: DEBUG builds honor `MACSIP_SIP_TRACE=1` (environment)
+to raise the PJSIP log level to 5 — full SIP traces incl. SDP, console
+only, opt-in per launch. Not compiled into release builds (traces carry
+Authorization headers).
 
 ## Linking (Milestone 1)
 

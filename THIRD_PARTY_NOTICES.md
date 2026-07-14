@@ -51,6 +51,11 @@ BSD 3-Clause License.
 Distributed with pjproject under its permissive terms; exact notice to be
 re-verified against the pinned tree before the first binary release.
 
+### bcg729 (G.729A/B codec) 1.1.1
+Copyright (C) 2011-2019 Belledonne Communications SARL.
+Licensed under the GNU General Public License v3 — the same license as
+MacSIP itself. Statically linked into the SIP core.
+
 ### G.722.1 / G.722.1C (Polycom Siren)
 Present in the pjproject source tree but **disabled and not compiled** into
 MacSIP builds (patent/licensing-encumbered; see DEPENDENCY_LICENSES.md).

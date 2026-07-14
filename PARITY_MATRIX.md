@@ -79,7 +79,7 @@ the TestPBX tier.
 | **10. Codecs** ||||||||
 | Enable/disable/priority UI; negotiated display | Yes; default-enabled = PCMA+PCMU only | Defaults: Implemented 2026-07-14 (PCMU/PCMA/G722 enabled, rest disabled — MicroSIP parity); UI: Not started | SIPCore/Bridge/MSPEngine.mm | — | Exercised by all call tests | — | — | Build ships GSM/iLBC/Speex compiled but priority-0 |
 | Opus | Available in MicroSIP | Not started | — | — | — | — | — | Approved: --with-opus via dependency-review |
-| G.729 (bcg729) | Available | Not started | — | — | — | — | — | Approved for later (GPLv3, patents expired) |
+| G.729 (bcg729) | Available | Implemented 2026-07-14 (bcg729 1.1.1 pinned+checksummed, runtime priority 170; VAD off = MicroSIP default, else G.729B DTX collapses silent streams to SID) | scripts/build-pjsip.sh, SIPCore/Bridge/MSPEngine.mm | — | Codec-policy test ✔; G.729-only peer call with bidirectional G.729 RTP ✔ (tier 1); TSan/ASan clean | User's switch run pending | — | Adopted after ENOMEDIA vs a G.729-only switch |
 | AMR/AMR-WB | Available | Blocked | — | — | — | — | — | Patent terms unconfirmed — do not bundle |
 | SILK | Available | Not applicable | — | — | — | — | — | SDK defunct (RB §4) |
 | G.723.1 | Available | Not applicable | — | — | — | — | — | No free implementation |

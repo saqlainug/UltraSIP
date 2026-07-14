@@ -27,6 +27,12 @@ assert_repo_root
 PJSIP_VERSION="2.17"
 PJSIP_URL="https://github.com/pjsip/pjproject/archive/refs/tags/${PJSIP_VERSION}.tar.gz"
 PJSIP_SHA256="065fe06c06788d97c35f563796d59f00ce52fe9558a52d7b490a042a966facce"
+# bcg729 (G.729A/B, GPLv3, Belledonne) — dependency-review recorded in
+# DEPENDENCY_LICENSES.md. Compiled per-arch with clang directly (pure
+# ANSI C; avoids a cmake dependency) and linked into PJSIP.
+BCG729_VERSION="1.1.1"
+BCG729_URL="https://github.com/BelledonneCommunications/bcg729/archive/refs/tags/${BCG729_VERSION}.tar.gz"
+BCG729_SHA256="68599a850535d1b182932b3f86558ac8a76d4b899a548183b062956c5fdc916d"
 MACOS_MIN="13.0"
 ARCHS=(arm64 x86_64)
 # Milestone 0 baseline: audio-only, native Apple TLS backend, bundled SRTP,
@@ -50,6 +56,8 @@ CACHE_DIR="${THIRD_PARTY}/cache"
 PJSIP_DIR="${THIRD_PARTY}/pjsip"
 DIST_DIR="${PJSIP_DIR}/dist"
 TARBALL="${CACHE_DIR}/pjproject-${PJSIP_VERSION}.tar.gz"
+BCG729_TARBALL="${CACHE_DIR}/bcg729-${BCG729_VERSION}.tar.gz"
+BCG729_DIR="${THIRD_PARTY}/bcg729"
 BUILD_INFO="${DIST_DIR}/BUILD_INFO.txt"
 
 FETCH_ONLY=0
@@ -67,21 +75,54 @@ require_tool curl "Ships with macOS"
 require_tool shasum "Ships with macOS"
 require_tool tar "Ships with macOS"
 
-fetch_and_verify() {
-  mkdir -p "${CACHE_DIR}"
-  if [[ ! -f "${TARBALL}" ]]; then
-    log "Downloading pjproject ${PJSIP_VERSION} from ${PJSIP_URL}"
-    curl -fsSL --retry 3 -o "${TARBALL}.tmp" "${PJSIP_URL}" \
+verify_archive() {
+  # $1 = path, $2 = url, $3 = expected sha256, $4 = name
+  if [[ ! -f "${1}" ]]; then
+    log "Downloading ${4} from ${2}"
+    curl -fsSL --retry 3 -o "${1}.tmp" "${2}" \
       || die "download failed. Check network access to github.com"
-    mv "${TARBALL}.tmp" "${TARBALL}"
+    mv "${1}.tmp" "${1}"
   fi
   local actual
-  actual="$(shasum -a 256 "${TARBALL}" | awk '{print $1}')"
-  if [[ "${actual}" != "${PJSIP_SHA256}" ]]; then
-    rm -f "${TARBALL}"
-    die "SHA-256 mismatch for ${TARBALL}: expected ${PJSIP_SHA256}, got ${actual}. Archive deleted; re-run to re-download. If the mismatch persists, treat it as a supply-chain red flag and STOP."
+  actual="$(shasum -a 256 "${1}" | awk '{print $1}')"
+  if [[ "${actual}" != "${3}" ]]; then
+    rm -f "${1}"
+    die "SHA-256 mismatch for ${1}: expected ${3}, got ${actual}. Archive deleted; re-run to re-download. If the mismatch persists, treat it as a supply-chain red flag and STOP."
   fi
-  log "Checksum OK: ${PJSIP_SHA256}"
+  log "Checksum OK (${4}): ${3}"
+}
+
+fetch_and_verify() {
+  mkdir -p "${CACHE_DIR}"
+  verify_archive "${TARBALL}" "${PJSIP_URL}" "${PJSIP_SHA256}" "pjproject ${PJSIP_VERSION}"
+  verify_archive "${BCG729_TARBALL}" "${BCG729_URL}" "${BCG729_SHA256}" "bcg729 ${BCG729_VERSION}"
+}
+
+# Builds bcg729 as a static lib for one arch. Pure ANSI C — compiled
+# directly with clang (no cmake dependency), laid out the way pjproject's
+# --with-bcg729 expects (include/bcg729/*.h + lib/libbcg729.a).
+build_bcg729_arch() {
+  local arch="${1}"
+  local src="${BCG729_DIR}/src-${arch}"
+  local prefix="${BCG729_DIR}/dist/${arch}"
+  log "=== Building bcg729 ${BCG729_VERSION} for ${arch} ==="
+  rm -rf "${src}" "${prefix}"
+  mkdir -p "${src}" "${prefix}/lib" "${prefix}/include"
+  tar -xzf "${BCG729_TARBALL}" -C "${src}" --strip-components=1
+  (
+    cd "${src}"
+    local objects=()
+    for source_file in src/*.c; do
+      local object="${source_file%.c}.o"
+      clang -c -O2 -arch "${arch}" -mmacosx-version-min="${MACOS_MIN}" \
+        -Iinclude -Isrc -o "${object}" "${source_file}" \
+        || die "bcg729 compile failed for ${source_file} (${arch})"
+      objects+=("${object}")
+    done
+    libtool -static -o "${prefix}/lib/libbcg729.a" "${objects[@]}" 2>/dev/null
+  )
+  cp -R "${src}/include/bcg729" "${prefix}/include/"
+  log "${arch}: libbcg729.a ($(du -h "${prefix}/lib/libbcg729.a" | cut -f1 | tr -d ' '))"
 }
 
 write_config_site() {
@@ -102,6 +143,7 @@ build_arch() {
   local arch="${1}"
   local src="${PJSIP_DIR}/src-${arch}"
   local prefix="${DIST_DIR}/${arch}"
+  build_bcg729_arch "${arch}"
   log "=== Building pjproject ${PJSIP_VERSION} for ${arch} ==="
   rm -rf "${src}" "${prefix}"
   mkdir -p "${src}" "${prefix}"
@@ -116,6 +158,7 @@ build_arch() {
     ./configure \
       --host="${arch}-apple-darwin" \
       --prefix="${prefix}" \
+      --with-bcg729="${BCG729_DIR}/dist/${arch}" \
       "${CONFIGURE_FLAGS[@]}" \
       CFLAGS="-arch ${arch} -mmacosx-version-min=${MACOS_MIN} -O2 -g" \
       CXXFLAGS="-arch ${arch} -mmacosx-version-min=${MACOS_MIN} -O2 -g" \
@@ -130,8 +173,11 @@ build_arch() {
     make install >"${prefix}/make-install.log" 2>&1 \
       || die "make install failed for ${arch}; see ${prefix}/make-install.log"
   )
-  # Combine the per-module static libs into one archive per arch.
-  local libs=("${prefix}/lib/"*.a)
+  # Combine the per-module static libs into one archive per arch,
+  # INCLUDING external codec implementations (bcg729): pjproject's install
+  # only contains its own wrapper — without the implementation the app
+  # link fails on _initBcg729EncoderChannel etc.
+  local libs=("${prefix}/lib/"*.a "${BCG729_DIR}/dist/${arch}/lib/libbcg729.a")
   [[ -e "${libs[0]}" ]] || die "no static libraries produced for ${arch}"
   libtool -static -o "${prefix}/libpjproject-${arch}.a" "${libs[@]}" 2>/dev/null
   log "${arch}: $(basename "${prefix}/libpjproject-${arch}.a") ($(du -h "${prefix}/libpjproject-${arch}.a" | cut -f1 | tr -d ' '))"
@@ -204,6 +250,8 @@ merge_headers
   echo "version=${PJSIP_VERSION}"
   echo "url=${PJSIP_URL}"
   echo "sha256=${PJSIP_SHA256}"
+  echo "bcg729_version=${BCG729_VERSION}"
+  echo "bcg729_sha256=${BCG729_SHA256}"
   echo "macos_min=${MACOS_MIN}"
   echo "archs=${ARCHS[*]}"
   echo "configure_flags=${CONFIGURE_FLAGS[*]}"

@@ -193,6 +193,58 @@ final class SIPIntegrationTests: XCTestCase {
             "IPv6 transports should be created on this host; got:\n\(diagnostics)")
     }
 
+    /// Default codec policy on the RUNNING engine: PCMU, PCMA, G722 and
+    /// G729 (bcg729) must all be enumerated and enabled. G729 is the
+    /// regression guard — GSM-termination providers frequently answer
+    /// G.729-only, and a build without it disconnects every call with an
+    /// SDP negotiation failure (PJMEDIA_SDPNEG_ENOMEDIA).
+    func testDefaultCodecPolicyIncludesG729() async throws {
+        let diagnostics = await engine.diagnostics()
+        for codec in ["PCMU/8000", "PCMA/8000", "G722/16000", "G729/8000"] {
+            let line =
+                diagnostics
+                .components(separatedBy: "\n")
+                .first { $0.trimmingCharacters(in: .whitespaces).hasPrefix(codec) }
+            XCTAssertNotNil(line, "\(codec) missing from codec list; got:\n\(diagnostics)")
+            XCTAssertFalse(
+                line?.contains("(priority 0)") ?? true,
+                "\(codec) is disabled (priority 0); got:\n\(diagnostics)")
+        }
+    }
+
+    /// The user-hit failure, reproduced: a peer that ONLY accepts G.729
+    /// (every other codec disabled) must still yield a connected call
+    /// with bidirectional RTP. Before bcg729 adoption this exact shape
+    /// disconnected instantly with an SDP negotiation failure.
+    func testG729OnlyPeerCallWithMedia() async throws {
+        // --no-vad: the peer re-encodes the looped (silent) audio, and its
+        // G.729B VAD would otherwise collapse the return stream to SID
+        // frames — same DTX behavior MacSIP disables via noVad.
+        try peer.launch(extraArgs: [
+            "--auto-answer=200", "--auto-loop", "--no-vad",
+            "--dis-codec=PCMU", "--dis-codec=PCMA", "--dis-codec=G722",
+            "--dis-codec=GSM", "--dis-codec=iLBC", "--dis-codec=speex",
+            "--dis-codec=L16",
+        ])
+        try await peer.waitUntilReady()
+
+        let id = try await engine.makeCall(to: "sip:loop@127.0.0.1:\(Self.peerPort)")
+        _ = try await waitForUpdate(timeout: 10) {
+            $0.id == id && $0.phase == .connected(HoldState.none)
+        }
+        // G729 is the only codec the peer can negotiate — looped RTP in
+        // both directions proves the G.729 stream is real, not just 200 OK.
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        let stats = await engine.rtpStats(for: id)
+        XCTAssertGreaterThan(stats.tx, 20, "expected outbound G.729 RTP, got \(stats.tx)")
+        XCTAssertGreaterThan(stats.rx, 20, "expected looped G.729 RTP, got \(stats.rx)")
+        engine.hangup(id)
+        _ = try await waitForUpdate(timeout: 8) {
+            if case .disconnected = $0.phase { return $0.id == id }
+            return false
+        }
+    }
+
     /// Incoming call rejected as busy: the peer must see 486.
     func testIncomingCallRejectBusy() async throws {
         try peer.launch(extraArgs: [])
