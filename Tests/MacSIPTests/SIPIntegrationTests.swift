@@ -181,6 +181,18 @@ final class SIPIntegrationTests: XCTestCase {
         }
     }
 
+    /// IPv6 transports (SPEC §2 "IPv6 where supported") come up on the
+    /// running engine. NOTE: an end-to-end IPv6 CALL is not verified —
+    /// the pjsua CLI in 2.17 has no IPv6 option, and the Dockerised
+    /// TestPBX is IPv4-only, so no local IPv6 peer exists
+    /// (docs/INTEROP_TEST_MATRIX.md records this gap).
+    func testIPv6TransportsAvailable() async throws {
+        let diagnostics = await engine.diagnostics()
+        XCTAssertTrue(
+            diagnostics.contains("IPv6 (UDP/TCP)"),
+            "IPv6 transports should be created on this host; got:\n\(diagnostics)")
+    }
+
     /// Incoming call rejected as busy: the peer must see 486.
     func testIncomingCallRejectBusy() async throws {
         try peer.launch(extraArgs: [])

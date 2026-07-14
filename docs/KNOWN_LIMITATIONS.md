@@ -9,15 +9,20 @@ Updated per release; honest by policy (never imply unimplemented features).
   (docs/INTEROP_TEST_MATRIX.md). Gaps that remain in the matrix:
   PBX→MacSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
   scenario coverage.
-- Multiple accounts with switch-without-restart work; the per-account
-  field set is still partial (no dial plan/prefix, voicemail number, port
-  overrides, session timers, presence publishing, caller-ID privacy, or
-  custom UA/headers yet — SPEC §1).
+- Account field set now covers the network-maturity set (transport incl.
+  UDP+TCP auto, registration toggle/interval, outbound proxy, keepalive,
+  session timers, contact/via rewrite, STUN/ICE/TURN, voicemail number,
+  dial prefix). Still deferred to their own milestones: full dial-plan
+  pattern language, presence publishing, caller-ID privacy, custom
+  User-Agent/headers, local port overrides.
 - STUN and TURN are implemented (config + Keychain TURN credential) but
   UNVERIFIED against real NAT infrastructure; ICE is verified on loopback
-  only. TLS trusted-CA happy path untested (manual item). UDP+TCP
-  combined mode and IPv6 pending. Network/sleep-wake recovery implemented
-  with manual test items pending (TESTING.md).
+  only. TLS trusted-CA happy path untested (manual item).
+- IPv6: UDP6/TCP6 transports are created and verified, but no end-to-end
+  IPv6 call has been made — there is no local IPv6 peer (pjsua 2.17's CLI
+  has no IPv6 option; the Dockerised Asterisk is IPv4-only).
+- Network/sleep-wake recovery implemented; physical scenarios remain
+  manual items (TESTING.md).
 - TestPBX Asterisk image lacks res_srtp — PBX-side SRTP blocked until an
   SRTP-capable image passes dependency-review (endpoint config ready).
 - Mic mute is implemented but has no media-level automated assertion yet;

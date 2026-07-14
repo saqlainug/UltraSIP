@@ -45,6 +45,44 @@ final class SIPAccountConfigTests: XCTestCase {
         XCTAssertTrue(config.validate().contains(.emptyUsername))
     }
 
+    func testTransportParameterSemantics() {
+        var config = validConfig()
+        config.transport = .auto
+        XCTAssertEqual(config.transportParameter, "", "auto = RFC 3263 selection, no parameter")
+        config.transport = .udp
+        XCTAssertEqual(config.transportParameter, ";transport=udp")
+        config.transport = .tcp
+        XCTAssertEqual(config.transportParameter, ";transport=tcp")
+        config.transport = .tls
+        XCTAssertEqual(config.transportParameter, ";transport=tls")
+    }
+
+    func testNetworkFieldValidation() {
+        var config = validConfig()
+        config.outboundProxy = "not a host"
+        config.keepaliveInterval = -1
+        config.sessionTimerExpiry = 30
+        config.voicemailNumber = "vm@host"
+        config.dialPrefix = "9;rm -rf"
+        let errors = config.validate()
+        XCTAssertTrue(errors.contains(.invalidOutboundProxy("not a host")))
+        XCTAssertTrue(errors.contains(.invalidKeepalive(-1)))
+        XCTAssertTrue(errors.contains(.invalidSessionTimerExpiry(30)))
+        XCTAssertTrue(errors.contains(.invalidVoicemailNumber("vm@host")))
+        XCTAssertTrue(errors.contains(.invalidDialPrefix("9;rm -rf")))
+    }
+
+    func testValidNetworkFieldsPass() {
+        var config = validConfig()
+        config.outboundProxy = "sip:edge.example.com:5061"
+        config.keepaliveInterval = 30
+        config.sessionTimerMode = .required
+        config.sessionTimerExpiry = 1800
+        config.voicemailNumber = "*97"
+        config.dialPrefix = "9"
+        XCTAssertEqual(config.validate(), [])
+    }
+
     func testConfigNeverExposesPassword() {
         // Structural guarantee: the type has no password property — only the
         // Keychain reference. This test documents the invariant.

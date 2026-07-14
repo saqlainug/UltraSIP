@@ -27,6 +27,15 @@ struct DialerView: View {
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(!canCall)
             .accessibilityLabel("Place audio call")
+            if model.account?.voicemailNumber.isEmpty == false {
+                Button {
+                    Task { await model.dialVoicemail() }
+                } label: {
+                    Image(systemName: "envelope.fill")
+                }
+                .help("Call voicemail")
+                .accessibilityLabel("Call voicemail")
+            }
         }
         .padding(.horizontal, 12)
     }

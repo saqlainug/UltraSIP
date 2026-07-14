@@ -106,6 +106,7 @@ struct EngineCore {
     int tlsTransportId = -1;
     bool tlsVerifyDisabled = false;  // current TLS transport's policy
     bool tlsAvailable = false;
+    bool ipv6Available = false;
 };
 
 static MSPMediaStatus mediaStatusFrom(const pj::CallInfo &info) {
@@ -337,6 +338,20 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             tcpTransport.port = (unsigned)port;
             self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TCP, tcpTransport);
             [self createTLSTransportVerifyDisabled:NO];
+            // IPv6 (SPEC §2 "where supported"): best-effort; absence of
+            // IPv6 on the host must not block startup.
+            try {
+                pj::TransportConfig udp6;
+                udp6.port = (unsigned)port;
+                self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_UDP6, udp6);
+                pj::TransportConfig tcp6;
+                tcp6.port = (unsigned)port;
+                self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TCP6, tcp6);
+                self->_core.ipv6Available = true;
+            } catch (const pj::Error &e) {
+                self->_core.ipv6Available = false;
+                PJ_LOG(2, ("MSPEngine", "IPv6 transports unavailable: %s", e.reason.c_str()));
+            }
             self->_core.endpoint->libStart();
             if (useNullAudio) {
                 self->_core.endpoint->audDevManager().setNullDev();
@@ -461,6 +476,11 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
     std::string turnServer([config.turnServer UTF8String] ?: "");
     std::string turnUser([config.turnUsername UTF8String] ?: "");
     std::string turnPassword([config.turnPassword UTF8String] ?: "");
+    long keepalive = config.keepaliveSeconds;
+    long timerMode = config.sessionTimerMode;
+    long timerExpiry = config.sessionTimerExpirySeconds;
+    bool contactRewrite = config.contactRewrite;
+    bool viaRewrite = config.viaRewrite;
     BOOL usesTLS = [config.registrarUri containsString:@"transport=tls"]
         || [config.proxyUri containsString:@"transport=tls"];
     [self onEngine:^{
@@ -533,7 +553,20 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
                     PJ_LOG(2, ("MSPEngine", "STUN update failed: %s", e.reason.c_str()));
                 }
             }
+            // NOTE: do NOT set mediaConfig.ipv6Use — pjsua_acc_add asserts
+            // it is PJSUA_IPV6_DISABLED in PJSIP 2.17 (the field is
+            // deprecated; media address family now follows the signaling
+            // transport automatically). Setting it aborts the process.
             accountConfig.natConfig.iceEnabled = iceEnabled;
+            if (keepalive > 0) accountConfig.natConfig.udpKaIntervalSec = (unsigned)keepalive;
+            accountConfig.natConfig.contactRewriteUse = contactRewrite ? 2 : 0;
+            accountConfig.natConfig.viaRewriteUse = viaRewrite ? 1 : 0;
+            switch (timerMode) {
+                case 0: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_INACTIVE; break;
+                case 2: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_REQUIRED; break;
+                default: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_OPTIONAL; break;
+            }
+            if (timerExpiry > 0) accountConfig.callConfig.timerSessExpiresSec = (unsigned)timerExpiry;
             if (!turnServer.empty()) {
                 accountConfig.natConfig.turnEnabled = true;
                 accountConfig.natConfig.turnServer = turnServer;
@@ -745,11 +778,12 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
         } else {
             try {
                 [info appendFormat:@"PJSIP: %s\n", self->_core.endpoint->libVersion().full.c_str()];
-                [info appendFormat:@"Transports: UDP, TCP, TLS %s\nCodecs:\n",
+                [info appendFormat:@"Transports: UDP, TCP, TLS %s, IPv6 %s\nCodecs:\n",
                                    self->_core.tlsAvailable
                                        ? (self->_core.tlsVerifyDisabled ? "(verification OFF — insecure override)"
                                                                         : "(system trust)")
-                                       : "(unavailable)"];
+                                       : "(unavailable)",
+                                   self->_core.ipv6Available ? "(UDP/TCP)" : "(unavailable)"];
                 for (const auto &codec : self->_core.endpoint->codecEnum2()) {
                     [info appendFormat:@"  %s (priority %d)\n", codec.codecId.c_str(), (int)codec.priority];
                 }

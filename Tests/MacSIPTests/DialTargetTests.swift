@@ -51,4 +51,19 @@ final class DialTargetTests: XCTestCase {
     func testBareNumberWithoutAccountDomainFails() {
         XCTAssertEqual(DialTarget.parse("100", accountDomain: ""), .failure(.invalidURI))
     }
+
+    // MARK: Dialing prefix (SPEC §3: bare numbers only)
+
+    func testPrefixAppliedToBareNumbersOnly() {
+        XCTAssertEqual(DialTarget.applyingDialPrefix("9", to: "5551234"), "95551234")
+        XCTAssertEqual(DialTarget.applyingDialPrefix("9", to: " *97 "), "9*97")
+        XCTAssertEqual(DialTarget.applyingDialPrefix("00", to: "+4912345"), "00+4912345")
+    }
+
+    func testPrefixNeverCorruptsURIsOrHosts() {
+        XCTAssertEqual(DialTarget.applyingDialPrefix("9", to: "sip:bob@other.com"), "sip:bob@other.com")
+        XCTAssertEqual(DialTarget.applyingDialPrefix("9", to: "bob@other.com"), "bob@other.com")
+        XCTAssertEqual(DialTarget.applyingDialPrefix("9", to: "10.0.0.5:5060"), "10.0.0.5:5060")
+        XCTAssertEqual(DialTarget.applyingDialPrefix("", to: "5551234"), "5551234")
+    }
 }

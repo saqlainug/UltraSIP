@@ -62,6 +62,11 @@
         _turnServer = @"";
         _turnUsername = @"";
         _turnPassword = @"";
+        _keepaliveSeconds = 0;
+        _sessionTimerMode = 1;  // optional (PJSIP default)
+        _sessionTimerExpirySeconds = 0;
+        _contactRewrite = YES;
+        _viaRewrite = YES;
     }
     return self;
 }

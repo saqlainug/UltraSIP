@@ -26,6 +26,9 @@ Peers/infrastructure vs scenario, as of **2026-07-14**:
 | Account switch without restart (re-register + call as new identity) | Not applicable | **Pass** (tier 2, 2026-07-14) | Not tested | Not tested |
 | ICE-enabled call, media both ways | Not tested | **Pass** (tier 2, 2026-07-14; ice_support=yes, loopback candidates) | Not tested | Not tested |
 | STUN / TURN against real NAT infra | Not applicable | Not testable locally — needs external STUN/TURN (or a future coturn container) | Not tested | Not tested |
+| IPv6 transports created (UDP6/TCP6) | **Pass** (tier 1, 2026-07-14; engine diagnostics) | n/a | n/a | n/a |
+| IPv6 end-to-end call | **Blocked** — no local IPv6 peer: pjsua 2.17 CLI has no IPv6 option and the Dockerised Asterisk is IPv4-only | **Blocked** (same) | Not tested | Not tested |
+| Sanitizers over full call lifecycle | **Pass** — TSan clean (no data races) and ASan clean (no use-after-free), tier-1 suite, 2026-07-14 | n/a | n/a | n/a |
 
 Environment notes: TestPBX runs in Docker (image `andrius/asterisk:
 alpine-20.5.2`); the UDP path through Docker's proxy drops oversized SIP

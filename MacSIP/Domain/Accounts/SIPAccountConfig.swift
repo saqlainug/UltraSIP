@@ -6,9 +6,28 @@ import Foundation
 /// milestones are added when their features land (SPEC §1) — no dead fields.
 nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     enum Transport: String, CaseIterable, Sendable {
+        /// RFC 3263 selection: UDP with automatic TCP for large requests
+        /// (MicroSIP "UDP+TCP" mode).
+        case auto
+        /// Forces ;transport=udp on the registrar.
         case udp
         case tcp
         case tls
+
+        var displayName: String {
+            switch self {
+            case .auto: "UDP + TCP (auto)"
+            case .udp: "UDP"
+            case .tcp: "TCP"
+            case .tls: "TLS"
+            }
+        }
+    }
+
+    enum SessionTimerMode: String, CaseIterable, Sendable {
+        case off
+        case optional
+        case required
     }
 
     /// SPEC §2 media-encryption policy. DTLS-SRTP is out of scope by
@@ -51,6 +70,20 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
     var turnServer: String
     var turnUsername: String
     var turnPasswordRef: String
+    /// Outbound proxy ("host[:port]" or full sip: URI; empty = none) —
+    /// routes ALL account requests when set (SPEC §1/§2).
+    var outboundProxy: String
+    /// UDP keepalive seconds (0 = stack default).
+    var keepaliveInterval: Int
+    var sessionTimerMode: SessionTimerMode
+    /// Session-Expires seconds (0 = stack default; else ≥ 90, RFC 4028).
+    var sessionTimerExpiry: Int
+    /// NAT rewrites (MicroSIP "Allow IP rewrite" family); default on.
+    var contactRewrite: Bool
+    var viaRewrite: Bool
+    var voicemailNumber: String
+    /// Prepended to bare dialed numbers only (SPEC §3 dialing prefix).
+    var dialPrefix: String
 
     init(
         id: UUID = UUID(),
@@ -70,7 +103,15 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         iceEnabled: Bool = false,
         turnServer: String = "",
         turnUsername: String = "",
-        turnPasswordRef: String = ""
+        turnPasswordRef: String = "",
+        outboundProxy: String = "",
+        keepaliveInterval: Int = 0,
+        sessionTimerMode: SessionTimerMode = .optional,
+        sessionTimerExpiry: Int = 0,
+        contactRewrite: Bool = true,
+        viaRewrite: Bool = true,
+        voicemailNumber: String = "",
+        dialPrefix: String = ""
     ) {
         self.id = id
         self.label = label
@@ -90,11 +131,19 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         self.turnServer = turnServer
         self.turnUsername = turnUsername
         self.turnPasswordRef = turnPasswordRef
+        self.outboundProxy = outboundProxy
+        self.keepaliveInterval = keepaliveInterval
+        self.sessionTimerMode = sessionTimerMode
+        self.sessionTimerExpiry = sessionTimerExpiry
+        self.contactRewrite = contactRewrite
+        self.viaRewrite = viaRewrite
+        self.voicemailNumber = voicemailNumber
+        self.dialPrefix = dialPrefix
     }
 
-    /// URI transport parameter for non-UDP transports ("" for UDP).
+    /// URI transport parameter ("" for auto = RFC 3263 selection).
     var transportParameter: String {
-        transport == .udp ? "" : ";transport=\(transport.rawValue)"
+        transport == .auto ? "" : ";transport=\(transport.rawValue)"
     }
 
     /// Address-of-record, e.g. "sip:alice@pbx.example.com".
@@ -111,6 +160,11 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         case invalidRegistrationInterval(Int)
         case invalidSTUNServer(String)
         case invalidTURNServer(String)
+        case invalidOutboundProxy(String)
+        case invalidKeepalive(Int)
+        case invalidSessionTimerExpiry(Int)
+        case invalidVoicemailNumber(String)
+        case invalidDialPrefix(String)
 
         var message: String {
             switch self {
@@ -121,6 +175,11 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
             case .invalidRegistrationInterval(let value): "Invalid registration interval: \(value)"
             case .invalidSTUNServer(let value): "Invalid STUN server: \(value)"
             case .invalidTURNServer(let value): "Invalid TURN server: \(value)"
+            case .invalidOutboundProxy(let value): "Invalid outbound proxy: \(value)"
+            case .invalidKeepalive(let value): "Invalid keepalive interval: \(value)"
+            case .invalidSessionTimerExpiry(let value): "Session timer expiry must be 0 or ≥ 90 s: \(value)"
+            case .invalidVoicemailNumber(let value): "Invalid voicemail number: \(value)"
+            case .invalidDialPrefix(let value): "Invalid dialing prefix: \(value)"
             }
         }
     }
@@ -150,6 +209,30 @@ nonisolated struct SIPAccountConfig: Equatable, Identifiable, Sendable {
         }
         if !turnServer.isEmpty, !Self.isValidHostPort(turnServer) {
             errors.append(.invalidTURNServer(turnServer))
+        }
+        if !outboundProxy.isEmpty {
+            let stripped = outboundProxy.hasPrefix("sip:") ? String(outboundProxy.dropFirst(4)) : outboundProxy
+            if outboundProxy.count > 255 || !Self.isValidHostPort(stripped) {
+                errors.append(.invalidOutboundProxy(outboundProxy))
+            }
+        }
+        if keepaliveInterval < 0 || keepaliveInterval > 3600 {
+            errors.append(.invalidKeepalive(keepaliveInterval))
+        }
+        if sessionTimerExpiry != 0, !(90...7200).contains(sessionTimerExpiry) {
+            errors.append(.invalidSessionTimerExpiry(sessionTimerExpiry))
+        }
+        let dialable = CharacterSet(charactersIn: "0123456789*#+")
+        if !voicemailNumber.isEmpty,
+            voicemailNumber.count > 32
+                || !voicemailNumber.unicodeScalars.allSatisfy({ dialable.contains($0) })
+        {
+            errors.append(.invalidVoicemailNumber(voicemailNumber))
+        }
+        if !dialPrefix.isEmpty,
+            dialPrefix.count > 16 || !dialPrefix.unicodeScalars.allSatisfy({ dialable.contains($0) })
+        {
+            errors.append(.invalidDialPrefix(dialPrefix))
         }
         return errors
     }

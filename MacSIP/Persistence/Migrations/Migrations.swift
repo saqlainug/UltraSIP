@@ -61,6 +61,19 @@ nonisolated enum Migrations {
             ALTER TABLE accounts ADD COLUMN turn_password_ref TEXT NOT NULL DEFAULT '';
             """
         ),
+        (
+            4,
+            """
+            ALTER TABLE accounts ADD COLUMN outbound_proxy TEXT NOT NULL DEFAULT '';
+            ALTER TABLE accounts ADD COLUMN keepalive_interval INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE accounts ADD COLUMN session_timer_mode TEXT NOT NULL DEFAULT 'optional';
+            ALTER TABLE accounts ADD COLUMN session_timer_expiry INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE accounts ADD COLUMN contact_rewrite INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE accounts ADD COLUMN via_rewrite INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE accounts ADD COLUMN voicemail_number TEXT NOT NULL DEFAULT '';
+            ALTER TABLE accounts ADD COLUMN dial_prefix TEXT NOT NULL DEFAULT '';
+            """
+        ),
     ]
 
     static var latestVersion: Int { all.map(\.version).max() ?? 0 }

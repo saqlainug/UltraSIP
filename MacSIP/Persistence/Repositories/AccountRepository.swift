@@ -22,8 +22,10 @@ nonisolated final class AccountRepository: AccountStoring {
             INSERT INTO accounts (id, label, domain, registrar, username, auth_id,
                 display_name, transport, reg_interval, keychain_ref, registration_enabled,
                 media_encryption, tls_verify_disabled, stun_server, ice_enabled,
-                turn_server, turn_username, turn_password_ref)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                turn_server, turn_username, turn_password_ref, outbound_proxy,
+                keepalive_interval, session_timer_mode, session_timer_expiry,
+                contact_rewrite, via_rewrite, voicemail_number, dial_prefix)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 label = excluded.label, domain = excluded.domain,
                 registrar = excluded.registrar, username = excluded.username,
@@ -35,7 +37,15 @@ nonisolated final class AccountRepository: AccountStoring {
                 tls_verify_disabled = excluded.tls_verify_disabled,
                 stun_server = excluded.stun_server, ice_enabled = excluded.ice_enabled,
                 turn_server = excluded.turn_server, turn_username = excluded.turn_username,
-                turn_password_ref = excluded.turn_password_ref
+                turn_password_ref = excluded.turn_password_ref,
+                outbound_proxy = excluded.outbound_proxy,
+                keepalive_interval = excluded.keepalive_interval,
+                session_timer_mode = excluded.session_timer_mode,
+                session_timer_expiry = excluded.session_timer_expiry,
+                contact_rewrite = excluded.contact_rewrite,
+                via_rewrite = excluded.via_rewrite,
+                voicemail_number = excluded.voicemail_number,
+                dial_prefix = excluded.dial_prefix
             """,
             [
                 .text(account.id.uuidString), .text(account.label), .text(account.domain),
@@ -47,7 +57,13 @@ nonisolated final class AccountRepository: AccountStoring {
                 .integer(account.tlsVerificationDisabled ? 1 : 0),
                 .text(account.stunServer), .integer(account.iceEnabled ? 1 : 0),
                 .text(account.turnServer), .text(account.turnUsername),
-                .text(account.turnPasswordRef),
+                .text(account.turnPasswordRef), .text(account.outboundProxy),
+                .integer(Int64(account.keepaliveInterval)),
+                .text(account.sessionTimerMode.rawValue),
+                .integer(Int64(account.sessionTimerExpiry)),
+                .integer(account.contactRewrite ? 1 : 0),
+                .integer(account.viaRewrite ? 1 : 0),
+                .text(account.voicemailNumber), .text(account.dialPrefix),
             ])
     }
 
@@ -75,7 +91,16 @@ nonisolated final class AccountRepository: AccountStoring {
                 iceEnabled: (row["ice_enabled"]?.intValue ?? 0) == 1,
                 turnServer: row["turn_server"]?.textValue ?? "",
                 turnUsername: row["turn_username"]?.textValue ?? "",
-                turnPasswordRef: row["turn_password_ref"]?.textValue ?? "")
+                turnPasswordRef: row["turn_password_ref"]?.textValue ?? "",
+                outboundProxy: row["outbound_proxy"]?.textValue ?? "",
+                keepaliveInterval: Int(row["keepalive_interval"]?.intValue ?? 0),
+                sessionTimerMode: SIPAccountConfig.SessionTimerMode(
+                    rawValue: row["session_timer_mode"]?.textValue ?? "optional") ?? .optional,
+                sessionTimerExpiry: Int(row["session_timer_expiry"]?.intValue ?? 0),
+                contactRewrite: (row["contact_rewrite"]?.intValue ?? 1) == 1,
+                viaRewrite: (row["via_rewrite"]?.intValue ?? 1) == 1,
+                voicemailNumber: row["voicemail_number"]?.textValue ?? "",
+                dialPrefix: row["dial_prefix"]?.textValue ?? "")
         }
     }
 

@@ -108,6 +108,15 @@ final class PersistenceTests: XCTestCase {
         config.turnServer = "turn.example.com:3478"
         config.turnUsername = "turnuser"
         config.turnPasswordRef = "turn-cred-x"
+        config.transport = .auto
+        config.outboundProxy = "sip:edge.example.com"
+        config.keepaliveInterval = 25
+        config.sessionTimerMode = .required
+        config.sessionTimerExpiry = 900
+        config.contactRewrite = false
+        config.viaRewrite = false
+        config.voicemailNumber = "*97"
+        config.dialPrefix = "9"
         try repo.save(config)
         XCTAssertEqual(try repo.loadAll(), [config])
     }

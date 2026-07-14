@@ -109,6 +109,14 @@ typedef NS_ENUM(NSInteger, MSPSRTPPolicy) {
 @property(nonatomic, copy) NSString *turnServer;
 @property(nonatomic, copy) NSString *turnUsername;
 @property(nonatomic, copy) NSString *turnPassword;
+/// UDP keepalive seconds (0 = stack default).
+@property(nonatomic) NSInteger keepaliveSeconds;
+/// Session timers: 0 = off, 1 = optional, 2 = required.
+@property(nonatomic) NSInteger sessionTimerMode;
+/// Session-Expires seconds (0 = stack default).
+@property(nonatomic) NSInteger sessionTimerExpirySeconds;
+@property(nonatomic) BOOL contactRewrite;
+@property(nonatomic) BOOL viaRewrite;
 @end
 
 NS_ASSUME_NONNULL_END

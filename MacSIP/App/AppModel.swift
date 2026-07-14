@@ -242,7 +242,8 @@ final class AppModel: ObservableObject {
             lastError = "Configure an account first"
             return
         }
-        switch DialTarget.parse(input, accountDomain: account.domain) {
+        let prefixed = DialTarget.applyingDialPrefix(account.dialPrefix, to: input)
+        switch DialTarget.parse(prefixed, accountDomain: account.domain) {
         case .failure(let parseError):
             lastError = parseError.message
         case .success(let uri):
@@ -255,6 +256,29 @@ final class AppModel: ObservableObject {
                         startedAt: Date(), connectedAt: nil, endedAt: nil)
                 }
                 lastError = nil
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Dials the account's voicemail number (SPEC §3; button appears only
+    /// when configured). Bypasses the dial prefix — the number is already
+    /// PBX-local.
+    func dialVoicemail() async {
+        guard let account, !account.voicemailNumber.isEmpty else { return }
+        switch DialTarget.parse(account.voicemailNumber, accountDomain: account.domain) {
+        case .failure(let parseError):
+            lastError = parseError.message
+        case .success(let uri):
+            do {
+                let id = try await engine.makeCall(to: uri)
+                if calls[id] == nil {
+                    calls[id] = CallSnapshot(
+                        id: id, direction: .outgoing, remoteURI: uri, remoteDisplayName: "Voicemail",
+                        state: .dialing, muted: false, mediaActive: false,
+                        startedAt: Date(), connectedAt: nil, endedAt: nil)
+                }
             } catch {
                 lastError = error.localizedDescription
             }

@@ -30,6 +30,19 @@ nonisolated enum DialTarget {
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
             + "-_.+*#@:[]")
 
+    /// SPEC §3 dialing prefix: applied to BARE numbers only — never to
+    /// URIs, user@host forms, or host targets (prefixes must not corrupt
+    /// meaningful SIP syntax).
+    static func applyingDialPrefix(_ prefix: String, to input: String) -> String {
+        guard !prefix.isEmpty else { return input }
+        let trimmed = input.trimmingCharacters(in: .whitespaces)
+        let bareNumber = CharacterSet(charactersIn: "0123456789*#+")
+        guard !trimmed.isEmpty,
+            trimmed.unicodeScalars.allSatisfy({ bareNumber.contains($0) })
+        else { return input }
+        return prefix + trimmed
+    }
+
     /// Returns the SIP URI to dial, resolving bare numbers against the
     /// account domain.
     static func parse(_ input: String, accountDomain: String) -> Result<String, ParseError> {

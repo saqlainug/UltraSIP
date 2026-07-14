@@ -28,7 +28,7 @@ the TestPBX tier.
 | SIP status-code → user text mapping | SPEC §4 table | Unit tested 2026-07-13 | MacSIP/Domain/Calls/SIPStatusMapping.swift | 3 tests pass | n/a | n/a | — | First Domain slice |
 | CI (build+test+lint+secret scan) | n/a | Implemented | .github/workflows/ci.yml | n/a | n/a | Not yet run on GitHub | — | Runner label needs Xcode 26 |
 | **1. SIP accounts** ||||||||
-| Add/edit/delete/enable accounts, full field set | Settings → Accounts | In progress 2026-07-14: add/edit/delete/switch UI implemented; field set partial | Features/Accounts/, Persistence/ | Repo round-trips ✔ | Switch path ✔ | — | — | Still missing SPEC §1 fields: dial plan/prefix, voicemail number, port overrides, session timers, presence publish, caller-ID privacy, custom UA/headers |
+| Add/edit/delete/enable accounts, full field set | Settings → Accounts | Implemented 2026-07-14 (network-maturity field set) | Features/Accounts/, Persistence/ (migration v4) | Field validation + repo round-trips ✔ | Switch path ✔ | — | — | Now: registration toggle/interval, outbound proxy, keepalive, session timers (+expiry), contact/via rewrite, voicemail number, dial prefix, STUN/ICE/TURN, transport, encryption. Still deferred to their milestones: dial plan (§3), presence publishing (M5), caller-ID privacy (M4), custom UA/headers |
 | Multiple accounts, one active, switch w/o restart | Yes (one active at a time) | **Integration tested 2026-07-14** | App/AppModel.swift, Features/Accounts/AccountsListView.swift | Settings repo ✔ | Switch on running engine re-registers as new identity + places calls ✔ | — | — | Active id persisted (migration v3) |
 | Local account (serverless IP calls) | "Local Account" | Integration tested (local loop) 2026-07-13 | Domain/Accounts/SIPAccountConfig.swift (registrationEnabled) | ✔ | Local loop ✔ (used by all tier-1 tests) | — | — | No dedicated UI toggle yet |
 | Registration lifecycle, status, refresh, failure detail | Yes | **Integration tested 2026-07-14** (Asterisk TestPBX) | SIPCore/Bridge/MSPEngine.mm, Domain/Accounts/RegistrationState.swift | State machine ✔ | REGISTER+digest ✔ with expiry; wrong password → 401 "Authentication required" ✔ | — | Registrar | UDP only (TCP/TLS = M2) |
@@ -36,7 +36,7 @@ the TestPBX tier.
 | Keychain password storage | ini stores obfuscated pw | Unit tested 2026-07-13 | Security/KeychainStore.swift | Round-trip vs real Keychain ✔ | n/a | — | — | DB stores refs only; no-secret-columns enforced by test |
 | Account import/export | Export/import since 3.22.5 | Researched | — | — | — | — | — | No plaintext secrets by default |
 | **2. Transport & SIP security** ||||||||
-| UDP / TCP / TLS / UDP+TCP; IPv6 | Yes (UDP+TCP combined mode) | UDP+TCP+TLS: **Integration tested 2026-07-14**; UDP+TCP combined mode + IPv6: Not started | SIPCore/Bridge/MSPEngine.mm, Domain (Transport enum) | ✔ | TCP registration ✔; TLS registration ✔ (via override; see TLS row) | — | — | — |
+| UDP / TCP / TLS / UDP+TCP; IPv6 | Yes (UDP+TCP combined mode) | UDP/TCP/TLS + UDP+TCP auto mode: **Integration tested 2026-07-14**. IPv6: transports created ✔, end-to-end call **Blocked** (no local IPv6 peer) | SIPCore/Bridge/MSPEngine.mm, Domain (Transport enum incl. .auto) | ✔ | TCP+TLS registration ✔; IPv6 transports up ✔ | — | — | "auto" = RFC 3263 selection (no transport param) |
 | Digest auth; outbound proxy | Yes | Researched | — | — | — | — | — | — |
 | TLS system trust + hostname verify; visible insecure override | Yes | **Integration tested 2026-07-14** | SIPCore/Bridge/MSPEngine.mm (transport recreation), Features/Accounts | ✔ | Untrusted self-signed cert REJECTED by default ✔; visible per-account override registers over TLS ✔ | Trusted-CA happy path needs a real/installed CA (manual item) | — | Apple TLS backend, system trust store |
 | STUN / TURN / ICE | Yes (per-account settings) | ICE: **Integration tested 2026-07-14** (loopback candidates vs ice_support endpoint, media ✔). STUN/TURN: Implemented (config plumbing + Keychain TURN cred) — **unverified** (needs external STUN/TURN infra) | SIPCore/Bridge, Domain, Features/Accounts | Validation + repo ✔ | ICE ✔ | — | — | STUN endpoint-wide (PJSIP); coturn container is a future TestPBX addition |
@@ -44,8 +44,9 @@ the TestPBX tier.
 | DTLS-SRTP | Yes (since 3.22.3) | Not applicable | — | — | — | — | — | User decision 2026-07-13: waived (needs OpenSSL backend, RB §2); SDES-SRTP is the supported encryption |
 | **3. Dialer** ||||||||
 | Number/URI parsing (tel, E.164, SIP/SIPS URI, IP, params) | Yes | Researched | — | — | — | — | — | — |
-| Dial plan language + prefix | Pattern lang: x, [..], <d:s>, ., \| | Researched | — | — | — | — | — | Documented in RB §1 |
-| Redial, paste, keyboard entry, suggestions | Yes | Researched | — | — | — | — | — | — |
+| Dial plan language + prefix | Pattern lang: x, [..], <d:s>, ., \| | Prefix: Unit tested 2026-07-14 (bare numbers only; never corrupts URIs). Pattern language: Not started | Domain/Calls/DialTarget.swift | ✔ | Exercised by call tests | — | — | Full dial-plan grammar is a later slice |
+| Redial, paste, keyboard entry, suggestions | Yes | Not started (M3 dialpad) | — | — | — | — | — | — |
+| Voicemail dialing | Voicemail Number setting | Implemented 2026-07-14 | App/AppModel.swift (dialVoicemail), Features/Dialer | Validation ✔ | — | — | PBX voicemail app | Button appears only when a number is configured |
 | Post-connect DTMF (comma pauses) | Yes | Researched | — | — | — | — | — | — |
 | **4. Calls** ||||||||
 | Outgoing/incoming audio calls, answer/reject/busy/cancel | Yes | **Integration tested 2026-07-14** (pjsua loop + Asterisk PBX) | SIPCore/, App/AppModel.swift, Features/ | State machines ✔ | Peer loop: out/in/reject-486 + RTP both ways ✔. PBX: registered call to echo app, digest-challenged INVITE, RTP relayed both ways ✔; 486→Busy, 404→"Number not found" ✔ | — | — | Cancel-outgoing covered by hangup path |

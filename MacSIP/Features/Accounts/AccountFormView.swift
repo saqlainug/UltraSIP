@@ -23,6 +23,16 @@ struct AccountFormView: View {
     @State private var turnServer = ""
     @State private var turnUsername = ""
     @State private var turnPassword = ""
+    @State private var registrationEnabled = true
+    @State private var registrationInterval = ""
+    @State private var outboundProxy = ""
+    @State private var keepaliveInterval = ""
+    @State private var sessionTimerMode: SIPAccountConfig.SessionTimerMode = .optional
+    @State private var sessionTimerExpiry = ""
+    @State private var contactRewrite = true
+    @State private var viaRewrite = true
+    @State private var voicemailNumber = ""
+    @State private var dialPrefix = ""
 
     private var isEditing: Bool { editingAccount != nil }
 
@@ -41,9 +51,9 @@ struct AccountFormView: View {
                 TextField("Display name (optional)", text: $displayName)
                 TextField("Registrar (optional)", text: $registrar, prompt: Text("sip:pbx.example.com"))
                 Picker("Transport", selection: $transport) {
-                    Text("UDP").tag(SIPAccountConfig.Transport.udp)
-                    Text("TCP").tag(SIPAccountConfig.Transport.tcp)
-                    Text("TLS").tag(SIPAccountConfig.Transport.tls)
+                    ForEach(SIPAccountConfig.Transport.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
                 }
                 Picker("Media encryption", selection: $mediaEncryption) {
                     Text("None").tag(SIPAccountConfig.MediaEncryption.none)
@@ -79,6 +89,37 @@ struct AccountFormView: View {
                     "Allow invalid TLS certificates. Insecure: disables server certificate verification for this account"
                 )
             }
+
+            DisclosureGroup("Network & registration") {
+                Form {
+                    Toggle("Register with server", isOn: $registrationEnabled)
+                    TextField(
+                        "Registration interval (s)", text: $registrationInterval, prompt: Text("300"))
+                    TextField("Outbound proxy", text: $outboundProxy, prompt: Text("edge.example.com"))
+                    TextField("Keepalive (s)", text: $keepaliveInterval, prompt: Text("15"))
+                    Picker("Session timers", selection: $sessionTimerMode) {
+                        Text("Off").tag(SIPAccountConfig.SessionTimerMode.off)
+                        Text("Optional").tag(SIPAccountConfig.SessionTimerMode.optional)
+                        Text("Required").tag(SIPAccountConfig.SessionTimerMode.required)
+                    }
+                    TextField("Session expiry (s)", text: $sessionTimerExpiry, prompt: Text("1800"))
+                    Toggle("Contact rewrite (NAT)", isOn: $contactRewrite)
+                    Toggle("Via rewrite (NAT)", isOn: $viaRewrite)
+                }
+                .formStyle(.columns)
+                .textFieldStyle(.roundedBorder)
+            }
+            .font(.callout)
+
+            DisclosureGroup("Dialing") {
+                Form {
+                    TextField("Voicemail number", text: $voicemailNumber, prompt: Text("*97"))
+                    TextField("Dialing prefix", text: $dialPrefix, prompt: Text("9"))
+                }
+                .formStyle(.columns)
+                .textFieldStyle(.roundedBorder)
+            }
+            .font(.callout)
 
             DisclosureGroup("NAT traversal") {
                 Form {
@@ -125,6 +166,16 @@ struct AccountFormView: View {
                     config.iceEnabled = iceEnabled
                     config.turnServer = turnServer
                     config.turnUsername = turnUsername
+                    config.registrationEnabled = registrationEnabled
+                    config.registrationInterval = Self.parseSeconds(registrationInterval)
+                    config.outboundProxy = outboundProxy
+                    config.keepaliveInterval = Self.parseSeconds(keepaliveInterval)
+                    config.sessionTimerMode = sessionTimerMode
+                    config.sessionTimerExpiry = Self.parseSeconds(sessionTimerExpiry)
+                    config.contactRewrite = contactRewrite
+                    config.viaRewrite = viaRewrite
+                    config.voicemailNumber = voicemailNumber
+                    config.dialPrefix = dialPrefix
                     let newPassword = password
                     let newTURNPassword = turnPassword
                     Task {
@@ -152,6 +203,24 @@ struct AccountFormView: View {
             iceEnabled = account.iceEnabled
             turnServer = account.turnServer
             turnUsername = account.turnUsername
+            registrationEnabled = account.registrationEnabled
+            registrationInterval = account.registrationInterval > 0 ? String(account.registrationInterval) : ""
+            outboundProxy = account.outboundProxy
+            keepaliveInterval = account.keepaliveInterval > 0 ? String(account.keepaliveInterval) : ""
+            sessionTimerMode = account.sessionTimerMode
+            sessionTimerExpiry = account.sessionTimerExpiry > 0 ? String(account.sessionTimerExpiry) : ""
+            contactRewrite = account.contactRewrite
+            viaRewrite = account.viaRewrite
+            voicemailNumber = account.voicemailNumber
+            dialPrefix = account.dialPrefix
         }
+    }
+
+    /// Empty → 0 (stack default); non-numeric → -1 so validation rejects
+    /// it with a message instead of silently zeroing.
+    private static func parseSeconds(_ text: String) -> Int {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return 0 }
+        return Int(trimmed) ?? -1
     }
 }

@@ -78,8 +78,18 @@ final class SIPEngine: NSObject {
         // outbound proxy so ALL account requests (INVITE included) use it.
         bridgeConfig.registrarUri =
             config.registrationEnabled ? config.effectiveRegistrar + config.transportParameter : ""
-        bridgeConfig.proxyUri =
-            config.transport == .udp ? "" : "sip:\(config.domain)\(config.transportParameter);lr"
+        // Proxy precedence: explicit outbound proxy > transport-routing
+        // proxy (TCP/TLS need all requests routed with the parameter).
+        if !config.outboundProxy.isEmpty {
+            let base =
+                config.outboundProxy.hasPrefix("sip:")
+                ? config.outboundProxy : "sip:" + config.outboundProxy
+            bridgeConfig.proxyUri = base + config.transportParameter + ";lr"
+        } else if config.transport == .tcp || config.transport == .tls {
+            bridgeConfig.proxyUri = "sip:\(config.domain)\(config.transportParameter);lr"
+        } else {
+            bridgeConfig.proxyUri = ""
+        }
         bridgeConfig.srtpPolicy =
             switch config.mediaEncryption {
             case .none: .disabled
@@ -92,6 +102,16 @@ final class SIPEngine: NSObject {
         bridgeConfig.turnServer = config.turnServer
         bridgeConfig.turnUsername = config.turnUsername
         bridgeConfig.turnPassword = turnPassword
+        bridgeConfig.keepaliveSeconds = config.keepaliveInterval
+        bridgeConfig.sessionTimerMode =
+            switch config.sessionTimerMode {
+            case .off: 0
+            case .optional: 1
+            case .required: 2
+            }
+        bridgeConfig.sessionTimerExpirySeconds = config.sessionTimerExpiry
+        bridgeConfig.contactRewrite = config.contactRewrite
+        bridgeConfig.viaRewrite = config.viaRewrite
         bridgeConfig.username = config.username
         bridgeConfig.authID = config.authorizationID
         bridgeConfig.password = password
