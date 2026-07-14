@@ -46,7 +46,10 @@ struct AccountFormView: View {
                 TextField("Username", text: $username, prompt: Text("101"))
                 SecureField(
                     "Password", text: $password,
-                    prompt: Text(isEditing ? "••••• (unchanged)" : "Required"))
+                    prompt: Text(
+                        isEditing
+                            ? "••••• (unchanged)"
+                            : (registrationEnabled ? "Required" : "Optional for direct dialing")))
                 TextField("Auth ID (optional)", text: $authorizationID)
                 TextField("Display name (optional)", text: $displayName)
                 TextField("Registrar (optional)", text: $registrar, prompt: Text("sip:pbx.example.com"))
@@ -63,6 +66,23 @@ struct AccountFormView: View {
             }
             .formStyle(.columns)
             .textFieldStyle(.roundedBorder)
+
+            // First-class, not buried: MicroSIP "Local Account" parity —
+            // direct dialing against a switch with no REGISTER.
+            Toggle(isOn: $registrationEnabled) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Register with server")
+                    if !registrationEnabled {
+                        Text(
+                            "Direct dialing: calls go straight to the SIP server; credentials are only used if it asks for them"
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityLabel("Register with server")
+            .accessibilityHint("Off means direct dialing without registration")
 
             if mediaEncryption != .none, transport != .tls {
                 Label(
@@ -92,7 +112,6 @@ struct AccountFormView: View {
 
             DisclosureGroup("Network & registration") {
                 Form {
-                    Toggle("Register with server", isOn: $registrationEnabled)
                     TextField(
                         "Registration interval (s)", text: $registrationInterval, prompt: Text("300"))
                     TextField("Outbound proxy", text: $outboundProxy, prompt: Text("edge.example.com"))
@@ -184,7 +203,11 @@ struct AccountFormView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(domain.isEmpty || username.isEmpty || (!isEditing && password.isEmpty))
+                // Direct-dialing accounts may have no password at all —
+                // the switch may never challenge (MicroSIP parity).
+                .disabled(
+                    domain.isEmpty || username.isEmpty
+                        || (!isEditing && password.isEmpty && registrationEnabled))
             }
         }
         .padding(16)

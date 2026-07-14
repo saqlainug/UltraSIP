@@ -11,12 +11,24 @@ struct StatusHeaderView: View {
     }
 
     private var statusColor: Color {
-        switch model.registrationState {
-        case .registered: .green
-        case .registering: .yellow
-        case .failed: .red
-        case .unregistered: .gray
+        if model.isDirectDialing {
+            return model.directDialingReady ? .green : .gray
         }
+        switch model.registrationState {
+        case .registered: return .green
+        case .registering: return .yellow
+        case .failed: return .red
+        case .unregistered: return .gray
+        }
+    }
+
+    /// Direct-dialing accounts show availability, not registration
+    /// (MicroSIP local-account parity).
+    private var statusText: String {
+        if model.isDirectDialing {
+            return model.directDialingReady ? "Ready — direct dialing" : "Engine starting…"
+        }
+        return model.registrationState.userFacingDescription
     }
 
     var body: some View {
@@ -47,7 +59,7 @@ struct StatusHeaderView: View {
                     Text(accountTitle)
                         .font(.caption.weight(.medium))
                         .lineLimit(1)
-                    Text(model.registrationState.userFacingDescription)
+                    Text(statusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -56,7 +68,7 @@ struct StatusHeaderView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .accessibilityLabel(
-                "Account \(model.account?.label ?? "none"), \(model.registrationState.userFacingDescription). Switch account"
+                "Account \(model.account?.label ?? "none"), \(statusText). Switch account"
             )
             Spacer()
             Button {
@@ -67,7 +79,8 @@ struct StatusHeaderView: View {
             .buttonStyle(.borderless)
             .help("Re-register now")
             .accessibilityLabel("Re-register")
-            .disabled(model.account == nil)
+            // Meaningless for a non-registering account (honesty rule).
+            .disabled(model.account == nil || model.isDirectDialing)
             Button {
                 showDiagnostics = true
             } label: {

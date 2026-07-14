@@ -37,6 +37,19 @@ final class AppModel: ObservableObject {
         return accounts.first { $0.id == activeAccountID }
     }
 
+    /// MicroSIP "Local Account" mode: the account never registers; calls
+    /// go straight to the configured server and credentials are used only
+    /// when the switch challenges. The UI shows "Ready" (green) instead of
+    /// a registration state.
+    var isDirectDialing: Bool {
+        account?.registrationEnabled == false
+    }
+
+    /// True when a direct-dialing account is ready to place calls.
+    var directDialingReady: Bool {
+        isDirectDialing && engineStatus == .running
+    }
+
     private let engine: SIPEngine
     private let secrets: any SecretStore
     private var persistence: PersistenceStack?
@@ -250,6 +263,11 @@ final class AppModel: ObservableObject {
                 accounts.append(config)
             }
             setActiveAccount(config.id)
+            // A non-registering account emits no registration events —
+            // clear any state left over from a previous account.
+            if !config.registrationEnabled {
+                registrationState = .unregistered
+            }
             await configureEngineForActiveAccount()
             showAccountForm = false
             lastError = nil

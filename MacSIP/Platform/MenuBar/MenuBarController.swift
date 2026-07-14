@@ -47,6 +47,12 @@ final class MenuBarController {
         } else if model.doNotDisturb {
             symbol = "moon.fill"
             description = "MacSIP — Do Not Disturb"
+        } else if model.isDirectDialing {
+            // Local-account mode: availability, not registration.
+            symbol = model.directDialingReady ? "phone" : "phone.down"
+            description =
+                model.directDialingReady
+                ? "MacSIP — ready (direct dialing)" : "MacSIP — engine starting"
         } else {
             switch model.registrationState {
             case .registered:
@@ -70,8 +76,11 @@ final class MenuBarController {
     private func rebuild(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let status = NSMenuItem(
-            title: model.registrationState.userFacingDescription, action: nil, keyEquivalent: "")
+        let statusTitle =
+            model.isDirectDialing
+            ? (model.directDialingReady ? "Ready — direct dialing" : "Engine starting…")
+            : model.registrationState.userFacingDescription
+        let status = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
 
