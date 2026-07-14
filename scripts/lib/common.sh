@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for MacSIP scripts. Source this file; do not execute it.
+# Shared helpers for UltraSIP scripts. Source this file; do not execute it.
 # Callers must set REPO_ROOT before sourcing (see any script header).
 
 set -euo pipefail
@@ -18,8 +18,8 @@ require_tool() {
 
 # Guard: refuse to run from outside the repository.
 assert_repo_root() {
-  [[ -f "${REPO_ROOT}/CLAUDE.md" && -d "${REPO_ROOT}/MacSIP.xcodeproj" ]] \
-    || die "REPO_ROOT '${REPO_ROOT}' does not look like the MacSIP repository"
+  [[ -f "${REPO_ROOT}/CLAUDE.md" && -d "${REPO_ROOT}/UltraSIP.xcodeproj" ]] \
+    || die "REPO_ROOT '${REPO_ROOT}' does not look like the UltraSIP repository"
 }
 
 # xcconfig_value <KEY> — read a value from Config/Project.xcconfig.

@@ -1,4 +1,4 @@
-# MacSIP threat model
+# UltraSIP threat model
 
 Living document; every security-relevant feature updates it (with
 `/security-review` + security-reviewer agent per CLAUDE.md). Status column

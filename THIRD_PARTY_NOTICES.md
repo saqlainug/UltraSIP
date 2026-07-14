@@ -1,6 +1,6 @@
 # Third-party notices
 
-MacSIP is licensed under the GNU General Public License v3 (see LICENSE).
+UltraSIP is licensed under the GNU General Public License v3 (see LICENSE).
 It incorporates the following third-party software when built with the
 pinned configuration in `scripts/build-pjsip.sh`. Complete corresponding
 source for all GPL components is available from this repository and the
@@ -21,7 +21,7 @@ https://www.pjsip.org/licensing.htm — used here under GPLv2-or-later,
 combined into this GPLv3 work.
 
 PJSIP bundles the following third-party components that are compiled into
-MacSIP's SIP core:
+UltraSIP's SIP core:
 
 ### libsrtp
 Copyright (c) 2001-2017 Cisco Systems, Inc. All rights reserved.
@@ -54,11 +54,11 @@ re-verified against the pinned tree before the first binary release.
 ### bcg729 (G.729A/B codec) 1.1.1
 Copyright (C) 2011-2019 Belledonne Communications SARL.
 Licensed under the GNU General Public License v3 — the same license as
-MacSIP itself. Statically linked into the SIP core.
+UltraSIP itself. Statically linked into the SIP core.
 
 ### G.722.1 / G.722.1C (Polycom Siren)
 Present in the pjproject source tree but **disabled and not compiled** into
-MacSIP builds (patent/licensing-encumbered; see DEPENDENCY_LICENSES.md).
+UltraSIP builds (patent/licensing-encumbered; see DEPENDENCY_LICENSES.md).
 
 ---
 
@@ -70,7 +70,7 @@ verbatim copies of the license document.
 
 ---
 
-MacSIP is an original, independent project. It is not affiliated with,
+UltraSIP is an original, independent project. It is not affiliated with,
 endorsed by, or derived from the assets of MicroSIP (microsip.org); the
 MicroSIP name, logos, and artwork are the property of their owners and are
 not used by this project.

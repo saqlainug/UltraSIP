@@ -1,0 +1,1070 @@
+//
+// USPEngine implementation. The ONLY file that touches PJSIP directly
+// (with USPBridgeInternal.hpp). See USPEngine.h for the contract.
+//
+
+#import "USPEngine.h"
+
+#include <pjsua2.hpp>
+
+#include <atomic>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+
+NSErrorDomain const USPErrorDomain = @"com.ultranet.ultrasip.SIPCore";
+
+#pragma mark - Engine worker thread
+
+/// Single dedicated OS thread running a run loop. All PJSIP access happens
+/// here; the thread is registered with PJLIB implicitly by libCreate()
+/// (pj_init registers the calling thread) and defensively re-checked.
+@interface USPWorker : NSObject
+- (void)start;
+- (void)async:(dispatch_block_t)block;
+- (void)cancel;
+@end
+
+@implementation USPWorker {
+    NSThread *_thread;
+}
+
+- (void)start {
+    _thread = [[NSThread alloc] initWithTarget:self selector:@selector(threadMain) object:nil];
+    _thread.name = @"com.ultranet.ultrasip.sip-engine";
+    _thread.qualityOfService = NSQualityOfServiceUserInitiated;
+    [_thread start];
+}
+
+- (void)threadMain {
+    NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
+    [runLoop addPort:[NSMachPort port] forMode:NSDefaultRunLoopMode];
+    while (!NSThread.currentThread.isCancelled) {
+        @autoreleasepool {
+            [runLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+        }
+    }
+}
+
+- (void)async:(dispatch_block_t)block {
+    [self performSelector:@selector(runBlock:) onThread:_thread withObject:[block copy] waitUntilDone:NO];
+}
+
+- (void)runBlock:(dispatch_block_t)block {
+    block();
+}
+
+- (void)cancel {
+    [_thread cancel];
+}
+
+@end
+
+#pragma mark - C++ bridge internals
+
+@class USPEngine;
+static void USPEmitReg(USPEngine *engine, USPRegistrationEvent *event);
+static void USPEmitCall(USPEngine *engine, USPCallEvent *event, BOOL isNewIncoming);
+static void USPEngineAsync(USPEngine *engine, dispatch_block_t block);
+
+namespace ultrasip {
+
+/// True between libCreate() and libDestroy(); pj_thread_is_registered may
+/// only be called while PJLIB is initialized.
+static std::atomic<bool> g_pjlibReady{false};
+
+/// Defensive registration for any non-PJLIB-created thread that ends up
+/// executing engine blocks (CLAUDE.md threading rule 2). In this design all
+/// engine blocks run on the one thread that called libCreate (auto-
+/// registered by pj_init), so this is a belt-and-braces guard, not a
+/// license to call PJSIP from other threads. The descriptor is thread-local
+/// so it stays valid for the thread's lifetime.
+void ensureThreadRegisteredIfStarted() {
+    if (!g_pjlibReady.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (pj_thread_is_registered()) {
+        return;
+    }
+    static thread_local pj_thread_desc desc;
+    pj_thread_t *thread = nullptr;
+    pj_bzero(desc, sizeof(desc));
+    pj_thread_register("usp-engine", desc, &thread);
+}
+
+/// Interop guard: some gateways answer a reliable 180 (Require: 100rel)
+/// with a blank SDP body — `c=IN IP4 0.0.0.0`, zero m= lines. RFC 3262
+/// makes that body the formal SDP answer, and an answer with no media
+/// stream fails negotiation (PJMEDIA_SDPNEG_ENOMEDIA) and kills the call
+/// before the real answer in the 200 OK ever arrives (observed live
+/// against a GSM-termination switch). Strip such bodies from provisional
+/// INVITE responses BEFORE the transaction layer (priority < TSX_LAYER)
+/// so the invite session treats the response as a plain SDP-less
+/// provisional. SDP that carries at least one m= line — real early
+/// media — is never touched.
+static pj_bool_t sdpGuardOnRxResponse(pjsip_rx_data *rdata) {
+    pjsip_msg *msg = rdata->msg_info.msg;
+    if (msg == nullptr || msg->type != PJSIP_RESPONSE_MSG) return PJ_FALSE;
+    const int code = msg->line.status.code;
+    if (code <= 100 || code >= 200) return PJ_FALSE;
+    if (rdata->msg_info.cseq == nullptr ||
+        rdata->msg_info.cseq->method.id != PJSIP_INVITE_METHOD) {
+        return PJ_FALSE;
+    }
+    const pjsip_msg_body *body = msg->body;
+    if (body == nullptr || body->data == nullptr || body->len == 0) return PJ_FALSE;
+    if (pj_stricmp2(&body->content_type.type, "application") != 0 ||
+        pj_stricmp2(&body->content_type.subtype, "sdp") != 0) {
+        return PJ_FALSE;
+    }
+    const char *data = static_cast<const char *>(body->data);
+    for (unsigned i = 0; i + 1 < body->len; ++i) {
+        const bool atLineStart = (i == 0) || data[i - 1] == '\n';
+        if (atLineStart && data[i] == 'm' && data[i + 1] == '=') {
+            return PJ_FALSE;  // real media description — leave it alone
+        }
+    }
+    PJ_LOG(2, ("usp-sdp-guard",
+               "Stripping m-line-less SDP from %d INVITE response "
+               "(broken gateway early SDP would fail negotiation as the "
+               "answer); treating as SDP-less provisional",
+               code));
+    msg->body = nullptr;
+    return PJ_FALSE;  // continue normal processing without the body
+}
+
+static pjsip_module sdpGuardModule = {
+    nullptr,
+    nullptr,
+    {const_cast<char *>("usp-sdp-guard"), 13},
+    -1,
+    // Must see responses before mod-tsx-layer consumes them for the
+    // dialog/invite layers.
+    PJSIP_MOD_PRIORITY_TRANSPORT_LAYER + 1,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    &sdpGuardOnRxResponse,
+    nullptr,
+    nullptr,
+};
+
+class BridgeCall;
+
+struct EngineCore {
+    std::unique_ptr<pj::Endpoint> endpoint;
+    std::unique_ptr<pj::Account> account;
+    // Owned raw pointers; mutated ONLY on the engine thread. Values are
+    // deleted exactly once, on the engine thread, after erase.
+    std::map<int, BridgeCall *> calls;
+    std::set<int> mutedCalls;
+    bool started = false;
+    int tlsTransportId = -1;
+    bool tlsVerifyDisabled = false;  // current TLS transport's policy
+    bool tlsAvailable = false;
+    bool ipv6Available = false;
+};
+
+static USPMediaStatus mediaStatusFrom(const pj::CallInfo &info) {
+    for (const auto &media : info.media) {
+        if (media.type != PJMEDIA_TYPE_AUDIO) continue;
+        switch (media.status) {
+            case PJSUA_CALL_MEDIA_ACTIVE: return USPMediaStatusActive;
+            case PJSUA_CALL_MEDIA_LOCAL_HOLD: return USPMediaStatusLocalHold;
+            case PJSUA_CALL_MEDIA_REMOTE_HOLD: return USPMediaStatusRemoteHold;
+            case PJSUA_CALL_MEDIA_ERROR: return USPMediaStatusError;
+            default: break;
+        }
+    }
+    return USPMediaStatusNone;
+}
+
+/// Splits `"Display" <sip:u@h>` into display + URI (best effort).
+static void parseRemote(const std::string &raw, NSString **uriOut, NSString **displayOut) {
+    NSString *full = [NSString stringWithUTF8String:raw.c_str()] ?: @"";
+    NSString *uri = full;
+    NSString *display = @"";
+    NSRange lt = [full rangeOfString:@"<"];
+    NSRange gt = [full rangeOfString:@">"];
+    if (lt.location != NSNotFound && gt.location != NSNotFound && gt.location > lt.location) {
+        uri = [full substringWithRange:NSMakeRange(lt.location + 1, gt.location - lt.location - 1)];
+        display = [[full substringToIndex:lt.location]
+            stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \"'"]];
+    }
+    *uriOut = uri;
+    *displayOut = display;
+}
+
+class BridgeCall : public pj::Call {
+  public:
+    BridgeCall(pj::Account &account, USPEngine *engine, bool incoming, int callId = PJSUA_INVALID_ID)
+        : pj::Call(account, callId), engine_(engine), incoming_(incoming) {}
+
+    bool incoming() const { return incoming_; }
+
+    USPCallEvent *snapshotEvent(USPCallPhase phaseOverride = (USPCallPhase)-1) {
+        pj::CallInfo info;
+        try {
+            info = getInfo();
+        } catch (const pj::Error &) {
+            return nil;
+        }
+        USPCallPhase phase;
+        USPEarlyMediaFlag early = USPEarlyMediaFlagNone;
+        switch (info.state) {
+            case PJSIP_INV_STATE_CALLING: phase = USPCallPhaseCalling; break;
+            case PJSIP_INV_STATE_INCOMING: phase = USPCallPhaseIncoming; break;
+            case PJSIP_INV_STATE_EARLY:
+                phase = incoming_ ? USPCallPhaseIncoming : USPCallPhaseEarly;
+                early = (info.lastStatusCode == 183 || mediaStatusFrom(info) == USPMediaStatusActive)
+                            ? USPEarlyMediaFlagEarlyMedia
+                            : USPEarlyMediaFlagRinging;
+                break;
+            case PJSIP_INV_STATE_CONNECTING: phase = USPCallPhaseConnecting; break;
+            case PJSIP_INV_STATE_CONFIRMED: phase = USPCallPhaseConfirmed; break;
+            case PJSIP_INV_STATE_DISCONNECTED: phase = USPCallPhaseDisconnected; break;
+            default: phase = incoming_ ? USPCallPhaseIncoming : USPCallPhaseCalling; break;
+        }
+        if (phaseOverride != (USPCallPhase)-1) phase = phaseOverride;
+        NSString *uri = @"";
+        NSString *display = @"";
+        parseRemote(info.remoteUri, &uri, &display);
+        return [[USPCallEvent alloc] initWithCallId:info.id
+                                         isIncoming:incoming_
+                                              phase:phase
+                                          earlyFlag:early
+                                        mediaStatus:mediaStatusFrom(info)
+                                            sipCode:(NSInteger)info.lastStatusCode
+                                          remoteUri:uri
+                                  remoteDisplayName:display
+                                             reason:[NSString stringWithUTF8String:info.lastReason.c_str()] ?: @""];
+    }
+
+    void onCallState(pj::OnCallStateParam &prm) override;
+    void onCallMediaState(pj::OnCallMediaStateParam &prm) override;
+
+  private:
+    __weak USPEngine *engine_;
+    const bool incoming_;
+};
+
+class BridgeAccount : public pj::Account {
+  public:
+    explicit BridgeAccount(USPEngine *engine) : engine_(engine) {}
+
+    void onRegState(pj::OnRegStateParam &prm) override {
+        long expires = -1;
+        bool active = false;
+        try {
+            pj::AccountInfo info = getInfo();
+            active = info.regIsActive;
+            expires = info.regExpiresSec;
+        } catch (const pj::Error &) {
+        }
+        USPRegState state;
+        if (prm.status != PJ_SUCCESS || prm.code >= 300) {
+            state = USPRegStateFailed;
+        } else if (prm.code / 100 == 2) {
+            state = (active && expires > 0) ? USPRegStateRegistered : USPRegStateUnregistered;
+        } else {
+            state = USPRegStateRegistering;
+        }
+        NSInteger code = prm.code > 0 ? prm.code : (prm.status != PJ_SUCCESS ? 408 : 0);
+        USPRegistrationEvent *event = [[USPRegistrationEvent alloc]
+             initWithState:state
+                   sipCode:code
+            expiresSeconds:expires
+                    reason:[NSString stringWithUTF8String:prm.reason.c_str()] ?: @""];
+        USPEmitReg(engine_, event);
+    }
+
+    void onIncomingCall(pj::OnIncomingCallParam &iprm) override;
+
+  private:
+    __weak USPEngine *engine_;
+};
+
+}  // namespace ultrasip
+
+#pragma mark - USPEngine
+
+@interface USPEngine () {
+    ultrasip::EngineCore _core;
+    USPWorker *_worker;
+    dispatch_queue_t _delegateQueue;
+}
+@end
+
+@implementation USPEngine
+
+- (instancetype)init {
+    if ((self = [super init])) {
+        _worker = [[USPWorker alloc] init];
+        [_worker start];
+        _delegateQueue = dispatch_queue_create("com.ultranet.ultrasip.sip-events", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
+- (void)dealloc {
+    // Contract (USPEngine.h): stop before release. Deallocating a started
+    // engine would run libDestroy on the deallocating thread (F5).
+    NSAssert(!_core.started, @"USPEngine deallocated while started — call stopWithCompletion: first");
+    if (_core.started) {
+        NSLog(@"[USPEngine] ERROR: deallocated while started; PJSIP teardown on wrong thread");
+    }
+    [_worker cancel];
+}
+
+#pragma mark Internal plumbing (engine thread only)
+
+- (void)onEngine:(dispatch_block_t)block {
+    [_worker async:^{
+        ultrasip::ensureThreadRegisteredIfStarted();
+        try {
+            block();
+        } catch (const std::exception &e) {
+            // Non-PJSIP C++ exceptions must never cross into ObjC/Swift
+            // (security review F7). Completion-bearing sites also catch
+            // std::exception themselves so continuations still resume.
+            NSLog(@"[USPEngine] engine block threw std::exception: %s", e.what());
+        } catch (...) {
+            NSLog(@"[USPEngine] engine block threw unknown C++ exception");
+        }
+    }];
+}
+
+- (void)emitRegistrationEvent:(USPRegistrationEvent *)event {
+    id<USPEngineDelegate> delegate = self.delegate;
+    if (!delegate) return;
+    dispatch_async(_delegateQueue, ^{ [delegate sipEngineRegistrationChanged:event]; });
+}
+
+- (void)emitCallEvent:(USPCallEvent *)event incoming:(BOOL)isNewIncoming {
+    if (!event) return;
+    id<USPEngineDelegate> delegate = self.delegate;
+    if (!delegate) return;
+    dispatch_async(_delegateQueue, ^{
+        if (isNewIncoming) {
+            [delegate sipEngineIncomingCall:event];
+        } else {
+            [delegate sipEngineCallChanged:event];
+        }
+    });
+}
+
+- (ultrasip::EngineCore *)core {
+    return &_core;
+}
+
+static NSError *USPErrorFromPJ(const pj::Error &error) {
+    NSString *reason = [NSString stringWithUTF8String:error.reason.c_str()] ?: @"SIP stack error";
+    return [NSError errorWithDomain:USPErrorDomain
+                               code:error.status
+                           userInfo:@{NSLocalizedDescriptionKey : reason}];
+}
+
+#pragma mark Lifecycle
+
+- (void)startWithUserAgent:(NSString *)userAgent
+                      port:(NSInteger)port
+              useNullAudio:(BOOL)useNullAudio
+                completion:(void (^)(NSError *_Nullable))completion {
+    std::string ua([userAgent UTF8String] ?: "UltraSIP");
+    [self onEngine:^{
+        if (self->_core.started) {
+            dispatch_async(self->_delegateQueue, ^{ completion(nil); });
+            return;
+        }
+        try {
+            self->_core.endpoint = std::make_unique<pj::Endpoint>();
+            self->_core.endpoint->libCreate();
+            ultrasip::g_pjlibReady.store(true, std::memory_order_release);
+            pj::EpConfig config;
+            // Level ≤3: no SIP message traces in logs (they carry
+            // Authorization headers — CLAUDE.md redaction rules).
+            config.logConfig.level = 3;
+            config.logConfig.consoleLevel = 3;
+#ifdef DEBUG
+            // DEBUG builds always run the FULL SIP trace (level 5) on the
+            // console — SDP offers/answers are the #1 interop-debugging
+            // need, and env-var opt-in proved too fragile (Xcode scheme
+            // state). Traces carry Authorization/digest headers, so this
+            // block is compiled out of Release entirely (CLAUDE.md
+            // redaction rules). ULTRASIP_NO_SIP_TRACE=1 quiets a Debug run.
+            if (getenv("ULTRASIP_NO_SIP_TRACE") == nullptr) {
+                config.logConfig.level = 5;
+                config.logConfig.consoleLevel = 5;
+                PJ_LOG(1, ("USPEngine",
+                           "FULL SIP TRACE ON (DEBUG default) — console will contain "
+                           "credentials/digest material. ULTRASIP_NO_SIP_TRACE=1 disables."));
+            }
+#endif
+            config.uaConfig.userAgent = ua;
+            // VAD off = MicroSIP default. PJSUA's default (VAD on) makes
+            // G.729 Annex B DTX collapse a silent stream to a single SID
+            // frame, which strict gateways treat as dead RTP; continuous
+            // media is the parity behavior until a codec-settings UI
+            // exposes this.
+            config.medConfig.noVad = true;
+            self->_core.endpoint->libInit(config);
+            pj::TransportConfig transport;
+            transport.port = (unsigned)port;  // 0 = ephemeral
+            self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_UDP, transport);
+            pj::TransportConfig tcpTransport;
+            tcpTransport.port = (unsigned)port;
+            self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TCP, tcpTransport);
+            [self createTLSTransportVerifyDisabled:NO];
+            // IPv6 (SPEC §2 "where supported"): best-effort; absence of
+            // IPv6 on the host must not block startup.
+            try {
+                pj::TransportConfig udp6;
+                udp6.port = (unsigned)port;
+                self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_UDP6, udp6);
+                pj::TransportConfig tcp6;
+                tcp6.port = (unsigned)port;
+                self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TCP6, tcp6);
+                self->_core.ipv6Available = true;
+            } catch (const pj::Error &e) {
+                self->_core.ipv6Available = false;
+                PJ_LOG(2, ("USPEngine", "IPv6 transports unavailable: %s", e.reason.c_str()));
+            }
+            self->_core.endpoint->libStart();
+            // Interop guard for blank early SDP (see sdpGuardModule).
+            // The id is reset because the module struct outlives
+            // endpoint stop/start cycles and re-registration asserts on
+            // a stale id.
+            ultrasip::sdpGuardModule.id = -1;
+            {
+                pj_status_t guardStatus = pjsip_endpt_register_module(
+                    pjsua_get_pjsip_endpt(), &ultrasip::sdpGuardModule);
+                if (guardStatus != PJ_SUCCESS) {
+                    PJ_LOG(1, ("USPEngine",
+                               "usp-sdp-guard registration failed (%d) — blank "
+                               "early-SDP gateways will fail negotiation",
+                               guardStatus));
+                }
+            }
+            if (useNullAudio) {
+                self->_core.endpoint->audDevManager().setNullDev();
+            }
+            // Default codec policy: PCMU/PCMA (MicroSIP parity), G722
+            // (wideband), G729 (bcg729 — GSM-termination switches are
+            // frequently G.729-only; a missing G729 answer causes
+            // PJMEDIA_SDPNEG_ENOMEDIA and an instant disconnect).
+            // Everything else disabled until the codec-settings milestone.
+            // Compact SDP also keeps INVITEs under the RFC 3261 UDP size
+            // threshold — oversized SIP datagrams do not survive some
+            // NAT/proxy paths.
+            for (const auto &codec : self->_core.endpoint->codecEnum2()) {
+                unsigned priority = 0;
+                if (codec.codecId.rfind("PCMU/", 0) == 0) {
+                    priority = 200;
+                } else if (codec.codecId.rfind("PCMA/", 0) == 0) {
+                    priority = 190;
+                } else if (codec.codecId.rfind("G722/", 0) == 0) {
+                    priority = 180;
+                } else if (codec.codecId.rfind("G729/", 0) == 0) {
+                    priority = 170;
+                }
+                self->_core.endpoint->codecSetPriority(codec.codecId, (pj_uint8_t)priority);
+            }
+            self->_core.started = true;
+            dispatch_async(self->_delegateQueue, ^{ completion(nil); });
+        } catch (const pj::Error &e) {
+            NSError *error = USPErrorFromPJ(e);
+            [self resetCoreAfterFailedStart];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        } catch (const std::exception &e) {
+            NSError *error = [NSError errorWithDomain:USPErrorDomain
+                                                 code:-10
+                                             userInfo:@{
+                                                 NSLocalizedDescriptionKey :
+                                                     [NSString stringWithFormat:@"SIP stack failure: %s", e.what()]
+                                             }];
+            [self resetCoreAfterFailedStart];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        }
+    }];
+}
+
+/// Engine thread only. Clears ALL core state after a failed start —
+/// including the PJLIB-ready flag and TLS transport bookkeeping, which
+/// must never survive an endpoint's lifetime (security review F2/F6).
+- (void)resetCoreAfterFailedStart {
+    ultrasip::g_pjlibReady.store(false, std::memory_order_release);
+    self->_core.endpoint.reset();
+    self->_core.started = false;
+    self->_core.tlsTransportId = -1;
+    self->_core.tlsAvailable = false;
+    self->_core.tlsVerifyDisabled = false;
+}
+
+- (void)stopWithCompletion:(void (^)(void))completion {
+    [self onEngine:^{
+        if (self->_core.started) {
+            // Teardown order: calls → account → endpoint (CLAUDE.md rule 4).
+            for (auto &pair : self->_core.calls) {
+                try {
+                    pj::CallOpParam prm;
+                    pair.second->hangup(prm);
+                } catch (const pj::Error &) {
+                }
+                delete pair.second;
+            }
+            self->_core.calls.clear();
+            self->_core.mutedCalls.clear();
+            self->_core.account.reset();
+            ultrasip::g_pjlibReady.store(false, std::memory_order_release);
+            try {
+                self->_core.endpoint->libDestroy();
+            } catch (const pj::Error &) {
+            }
+            self->_core.endpoint.reset();
+            self->_core.started = false;
+            // Transport IDs must never outlive their endpoint (F2).
+            self->_core.tlsTransportId = -1;
+            self->_core.tlsAvailable = false;
+            self->_core.tlsVerifyDisabled = false;
+        }
+        dispatch_async(self->_delegateQueue, ^{ completion(); });
+    }];
+}
+
+/// Engine thread only. TLS verification is a TRANSPORT property in PJSIP,
+/// so the per-account override (SPEC §2: visible, default-off) is realized
+/// by recreating the TLS transport when the flag changes. Verification
+/// uses the system trust store via the Apple TLS backend.
+- (void)createTLSTransportVerifyDisabled:(BOOL)verifyDisabled {
+    try {
+        if (self->_core.tlsTransportId >= 0) {
+            self->_core.endpoint->transportClose(self->_core.tlsTransportId);
+            self->_core.tlsTransportId = -1;
+            self->_core.tlsAvailable = false;
+        }
+        pj::TransportConfig tlsTransport;
+        tlsTransport.port = 0;
+        tlsTransport.tlsConfig.verifyServer = verifyDisabled ? false : true;
+        self->_core.tlsTransportId =
+            self->_core.endpoint->transportCreate(PJSIP_TRANSPORT_TLS, tlsTransport);
+        self->_core.tlsVerifyDisabled = verifyDisabled;
+        self->_core.tlsAvailable = true;
+    } catch (const pj::Error &e) {
+        PJ_LOG(1, ("USPEngine", "TLS transport unavailable: %s", e.reason.c_str()));
+        self->_core.tlsAvailable = false;
+    }
+}
+
+#pragma mark Account
+
+- (void)configureAccount:(USPAccountConfig *)config
+              completion:(void (^)(NSError *_Nullable))completion {
+    std::string aor([config.aorUri UTF8String] ?: "");
+    std::string registrar([config.registrarUri UTF8String] ?: "");
+    std::string proxy([config.proxyUri UTF8String] ?: "");
+    std::string user([config.username UTF8String] ?: "");
+    std::string authID([config.authID UTF8String] ?: "");
+    std::string password([config.password UTF8String] ?: "");
+    long interval = config.regIntervalSeconds;
+    USPSRTPPolicy srtpPolicy = config.srtpPolicy;
+    BOOL tlsVerifyDisabled = config.tlsVerifyDisabled;
+    std::string stunServer([config.stunServer UTF8String] ?: "");
+    bool iceEnabled = config.iceEnabled;
+    std::string turnServer([config.turnServer UTF8String] ?: "");
+    std::string turnUser([config.turnUsername UTF8String] ?: "");
+    std::string turnPassword([config.turnPassword UTF8String] ?: "");
+    long keepalive = config.keepaliveSeconds;
+    long timerMode = config.sessionTimerMode;
+    long timerExpiry = config.sessionTimerExpirySeconds;
+    bool contactRewrite = config.contactRewrite;
+    bool viaRewrite = config.viaRewrite;
+    BOOL usesTLS = [config.registrarUri containsString:@"transport=tls"]
+        || [config.proxyUri containsString:@"transport=tls"];
+    [self onEngine:^{
+        if (!self->_core.started) {
+            NSError *error = [NSError errorWithDomain:USPErrorDomain
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey : @"Engine not started"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
+        if (usesTLS && !self->_core.tlsAvailable) {
+            NSError *error =
+                [NSError errorWithDomain:USPErrorDomain
+                                    code:-3
+                                userInfo:@{NSLocalizedDescriptionKey : @"TLS transport unavailable"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
+        // Reconfiguring destroys the current account, and BridgeCall
+        // objects reference it — refuse outright while calls are live
+        // (teardown order: calls before accounts; security review F1/F4).
+        // This also guarantees a TLS-verification change is never
+        // silently skipped.
+        if (!self->_core.calls.empty()) {
+            NSError *error = [NSError
+                errorWithDomain:USPErrorDomain
+                           code:-4
+                       userInfo:@{
+                           NSLocalizedDescriptionKey : @"End active calls before changing account settings"
+                       }];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
+        try {
+            self->_core.account.reset();  // replace: unregister + delete old
+            if (usesTLS && self->_core.tlsVerifyDisabled != (bool)tlsVerifyDisabled) {
+                [self createTLSTransportVerifyDisabled:tlsVerifyDisabled];
+            }
+            pj::AccountConfig accountConfig;
+            accountConfig.idUri = aor;
+            accountConfig.regConfig.registrarUri = registrar;
+            accountConfig.regConfig.registerOnAdd = true;
+            if (interval > 0) accountConfig.regConfig.timeoutSec = (unsigned)interval;
+            if (!proxy.empty()) accountConfig.sipConfig.proxies.push_back(proxy);
+            pj::AuthCredInfo cred("digest", "*", authID.empty() ? user : authID, 0, password);
+            accountConfig.sipConfig.authCreds.push_back(cred);
+            switch (srtpPolicy) {
+                case USPSRTPPolicyDisabled:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_DISABLED;
+                    break;
+                case USPSRTPPolicyOptional:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_OPTIONAL;
+                    break;
+                case USPSRTPPolicyMandatory:
+                    accountConfig.mediaConfig.srtpUse = PJMEDIA_SRTP_MANDATORY;
+                    break;
+            }
+            // SDES keys travel in SDP: secure signaling (TLS) is strongly
+            // recommended with SRTP but not enforced here — policy is the
+            // user's per SPEC §2 ("controlled secure-media fallback"); the
+            // account form shows a visible warning for SRTP-without-TLS.
+            accountConfig.mediaConfig.srtpSecureSignaling = 0;
+            // NAT traversal (SPEC §1 fields). STUN is endpoint-wide in
+            // PJSIP; applied dynamically. TURN/ICE are per-account.
+            if (!stunServer.empty()) {
+                pj::StringVector servers{stunServer};
+                try {
+                    self->_core.endpoint->natUpdateStunServers(servers, false);
+                } catch (const pj::Error &e) {
+                    PJ_LOG(2, ("USPEngine", "STUN update failed: %s", e.reason.c_str()));
+                }
+            }
+            // NOTE: do NOT set mediaConfig.ipv6Use — pjsua_acc_add asserts
+            // it is PJSUA_IPV6_DISABLED in PJSIP 2.17 (the field is
+            // deprecated; media address family now follows the signaling
+            // transport automatically). Setting it aborts the process.
+            accountConfig.natConfig.iceEnabled = iceEnabled;
+            if (keepalive > 0) accountConfig.natConfig.udpKaIntervalSec = (unsigned)keepalive;
+            accountConfig.natConfig.contactRewriteUse = contactRewrite ? 2 : 0;
+            accountConfig.natConfig.viaRewriteUse = viaRewrite ? 1 : 0;
+            switch (timerMode) {
+                case 0: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_INACTIVE; break;
+                case 2: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_REQUIRED; break;
+                default: accountConfig.callConfig.timerUse = PJSUA_SIP_TIMER_OPTIONAL; break;
+            }
+            if (timerExpiry > 0) accountConfig.callConfig.timerSessExpiresSec = (unsigned)timerExpiry;
+            if (!turnServer.empty()) {
+                accountConfig.natConfig.turnEnabled = true;
+                accountConfig.natConfig.turnServer = turnServer;
+                accountConfig.natConfig.turnConnType = PJ_TURN_TP_UDP;
+                accountConfig.natConfig.turnUserName = turnUser;
+                accountConfig.natConfig.turnPasswordType = PJ_STUN_PASSWD_PLAIN;
+                accountConfig.natConfig.turnPassword = turnPassword;
+            }
+            auto account = std::make_unique<ultrasip::BridgeAccount>(self);
+            account->create(accountConfig, true);
+            self->_core.account = std::move(account);
+            dispatch_async(self->_delegateQueue, ^{ completion(nil); });
+        } catch (const pj::Error &e) {
+            NSError *error = USPErrorFromPJ(e);
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        } catch (const std::exception &e) {
+            NSError *error = [NSError errorWithDomain:USPErrorDomain
+                                                 code:-10
+                                             userInfo:@{
+                                                 NSLocalizedDescriptionKey :
+                                                     [NSString stringWithFormat:@"SIP stack failure: %s", e.what()]
+                                             }];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        }
+    }];
+}
+
+- (void)removeAccountWithCompletion:(void (^)(void))completion {
+    [self onEngine:^{
+        // Account removal is deliberate teardown: calls first (rule 4).
+        for (auto &pair : self->_core.calls) {
+            try {
+                pj::CallOpParam prm;
+                pair.second->hangup(prm);
+            } catch (const pj::Error &) {
+            }
+            delete pair.second;
+        }
+        self->_core.calls.clear();
+        self->_core.mutedCalls.clear();
+        self->_core.account.reset();
+        if (completion) dispatch_async(self->_delegateQueue, ^{ completion(); });
+    }];
+}
+
+- (void)refreshRegistration {
+    [self onEngine:^{
+        if (!self->_core.account) return;
+        try {
+            self->_core.account->setRegistration(true);
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)handleNetworkChanged {
+    [self onEngine:^{
+        if (!self->_core.started) return;
+        try {
+            pj::IpChangeParam param;
+            self->_core.endpoint->handleIpChange(param);
+        } catch (const pj::Error &e) {
+            PJ_LOG(2, ("USPEngine", "handleIpChange failed: %s", e.reason.c_str()));
+        }
+    }];
+}
+
+#pragma mark Calls
+
+/// Call settings for every outgoing INVITE / final answer / re-INVITE:
+/// audio only. PJSIP 2.17 defaults txt_cnt (RFC 4103 real-time text) to 1,
+/// which adds an m=text line to every offer. MicroSIP (pjsip 2.15) never
+/// offers text, and at least one GSM-termination SBC responds to the
+/// two-m-line offer with a blank SDP answer that kills the call with
+/// PJMEDIA_SDPNEG_ENOMEDIA. RTT is not a UltraSIP feature (PARITY_MATRIX).
+static pj::CallOpParam USPAudioOnlyCallParam() {
+    pj::CallOpParam prm(true);
+    prm.opt.textCount = 0;
+    return prm;
+}
+
+- (void)makeCallTo:(NSString *)uri
+        completion:(void (^)(NSError *_Nullable, NSInteger))completion {
+    std::string destination([uri UTF8String] ?: "");
+    [self onEngine:^{
+        if (!self->_core.started || !self->_core.account) {
+            NSError *error = [NSError errorWithDomain:USPErrorDomain
+                                                 code:-2
+                                             userInfo:@{NSLocalizedDescriptionKey : @"No account configured"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error, -1); });
+            return;
+        }
+        auto *call = new ultrasip::BridgeCall(*self->_core.account, self, false);
+        try {
+            pj::CallOpParam prm = USPAudioOnlyCallParam();
+            call->makeCall(destination, prm);
+        } catch (const pj::Error &e) {
+            delete call;
+            NSError *error = USPErrorFromPJ(e);
+            dispatch_async(self->_delegateQueue, ^{ completion(error, -1); });
+            return;
+        }
+        int callId = call->getId();
+        self->_core.calls[callId] = call;
+        dispatch_async(self->_delegateQueue, ^{ completion(nil, callId); });
+        [self emitCallEvent:call->snapshotEvent() incoming:NO];
+    }];
+}
+
+- (void)withCall:(NSInteger)callId do:(void (^)(ultrasip::BridgeCall *call))operation {
+    [self onEngine:^{
+        auto found = self->_core.calls.find((int)callId);
+        if (found == self->_core.calls.end()) return;  // stale id — dropped
+        operation(found->second);
+    }];
+}
+
+- (void)answerCall:(NSInteger)callId {
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        try {
+            pj::CallOpParam prm = USPAudioOnlyCallParam();
+            prm.statusCode = PJSIP_SC_OK;
+            call->answer(prm);
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)rejectCall:(NSInteger)callId busy:(BOOL)busy {
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        try {
+            pj::CallOpParam prm;
+            prm.statusCode = busy ? PJSIP_SC_BUSY_HERE : PJSIP_SC_DECLINE;
+            call->hangup(prm);
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)hangupCall:(NSInteger)callId {
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        try {
+            pj::CallOpParam prm;
+            call->hangup(prm);
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)setCall:(NSInteger)callId held:(BOOL)held {
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        try {
+            pj::CallOpParam prm = USPAudioOnlyCallParam();
+            if (held) {
+                call->setHold(prm);
+            } else {
+                prm.opt.flag |= PJSUA_CALL_UNHOLD;
+                call->reinvite(prm);
+            }
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)setCall:(NSInteger)callId muted:(BOOL)muted {
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        if (muted) {
+            self->_core.mutedCalls.insert((int)callId);
+        } else {
+            self->_core.mutedCalls.erase((int)callId);
+        }
+        try {
+            pj::AudioMedia media = call->getAudioMedia(-1);
+            auto &manager = self->_core.endpoint->audDevManager();
+            if (muted) {
+                manager.getCaptureDevMedia().stopTransmit(media);
+            } else {
+                manager.getCaptureDevMedia().startTransmit(media);
+            }
+        } catch (const pj::Error &) {
+            // No active audio yet — the mute flag applies on media activation.
+        }
+    }];
+}
+
+- (void)sendDTMF:(NSString *)digits toCall:(NSInteger)callId {
+    std::string dtmf([digits UTF8String] ?: "");
+    [self withCall:callId do:^(ultrasip::BridgeCall *call) {
+        try {
+            call->dialDtmf(dtmf);
+        } catch (const pj::Error &) {
+        }
+    }];
+}
+
+- (void)statsForCall:(NSInteger)callId
+          completion:(void (^)(NSInteger, NSInteger))completion {
+    [self onEngine:^{
+        NSInteger tx = -1;
+        NSInteger rx = -1;
+        auto found = self->_core.calls.find((int)callId);
+        if (found != self->_core.calls.end()) {
+            try {
+                pj::StreamStat stat = found->second->getStreamStat(0);
+                tx = (NSInteger)stat.rtcp.txStat.pkt;
+                rx = (NSInteger)stat.rtcp.rxStat.pkt;
+            } catch (const pj::Error &) {
+            }
+        }
+        dispatch_async(self->_delegateQueue, ^{ completion(tx, rx); });
+    }];
+}
+
+#pragma mark Audio devices
+
+- (void)audioDevicesWithCompletion:(void (^)(NSArray<NSDictionary *> *, NSInteger, NSInteger))completion {
+    [self onEngine:^{
+        NSMutableArray<NSDictionary *> *devices = [NSMutableArray array];
+        NSInteger capture = -1;
+        NSInteger playback = -1;
+        if (self->_core.started) {
+            try {
+                auto &manager = self->_core.endpoint->audDevManager();
+                const auto list = manager.enumDev2();
+                for (const auto &info : list) {
+                    [devices addObject:@{
+                        @"index" : @(info.id),
+                        @"name" : [NSString stringWithUTF8String:info.name.c_str()] ?: @"",
+                        @"input" : @(info.inputCount > 0),
+                        @"output" : @(info.outputCount > 0),
+                    }];
+                }
+                capture = manager.getCaptureDev();
+                playback = manager.getPlaybackDev();
+            } catch (const pj::Error &e) {
+                PJ_LOG(2, ("USPEngine", "audio device enumeration failed: %s", e.reason.c_str()));
+            }
+        }
+        NSArray<NSDictionary *> *result = [devices copy];
+        dispatch_async(self->_delegateQueue, ^{ completion(result, capture, playback); });
+    }];
+}
+
+- (void)setCaptureDevice:(NSInteger)captureIndex
+          playbackDevice:(NSInteger)playbackIndex
+              completion:(void (^)(NSError *_Nullable))completion {
+    [self onEngine:^{
+        if (!self->_core.started) {
+            NSError *error = [NSError errorWithDomain:USPErrorDomain
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey : @"Engine not started"}];
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+            return;
+        }
+        try {
+            // PJSUA treats -1 as "system default" for both directions.
+            self->_core.endpoint->audDevManager().setCaptureDev((int)captureIndex);
+            self->_core.endpoint->audDevManager().setPlaybackDev((int)playbackIndex);
+            dispatch_async(self->_delegateQueue, ^{ completion(nil); });
+        } catch (const pj::Error &e) {
+            NSError *error = USPErrorFromPJ(e);
+            dispatch_async(self->_delegateQueue, ^{ completion(error); });
+        }
+    }];
+}
+
+#pragma mark Diagnostics
+
+- (void)diagnosticsWithCompletion:(void (^)(NSString *))completion {
+    [self onEngine:^{
+        NSMutableString *info = [NSMutableString string];
+        if (!self->_core.started) {
+            [info appendString:@"Engine: stopped\n"];
+        } else {
+            try {
+                [info appendFormat:@"PJSIP: %s\n", self->_core.endpoint->libVersion().full.c_str()];
+                [info appendFormat:@"Transports: UDP, TCP, TLS %s, IPv6 %s\nCodecs:\n",
+                                   self->_core.tlsAvailable
+                                       ? (self->_core.tlsVerifyDisabled ? "(verification OFF — insecure override)"
+                                                                        : "(system trust)")
+                                       : "(unavailable)",
+                                   self->_core.ipv6Available ? "(UDP/TCP)" : "(unavailable)"];
+                for (const auto &codec : self->_core.endpoint->codecEnum2()) {
+                    [info appendFormat:@"  %s (priority %d)\n", codec.codecId.c_str(), (int)codec.priority];
+                }
+                if (self->_core.account) {
+                    pj::AccountInfo accountInfo = self->_core.account->getInfo();
+                    [info appendFormat:@"Account: %s\nRegistered: %s (expires %ds)\n",
+                                       accountInfo.uri.c_str(), accountInfo.regIsActive ? "yes" : "no",
+                                       (int)accountInfo.regExpiresSec];
+                } else {
+                    [info appendString:@"Account: none\n"];
+                }
+                [info appendFormat:@"Active calls: %zu\n", self->_core.calls.size()];
+            } catch (const pj::Error &e) {
+                [info appendFormat:@"Diagnostics error: %s\n", e.reason.c_str()];
+            }
+        }
+        NSString *result = [info copy];
+        dispatch_async(self->_delegateQueue, ^{ completion(result); });
+    }];
+}
+
+@end
+
+#pragma mark - C++ → ObjC callback plumbing
+
+namespace ultrasip {
+
+void BridgeCall::onCallState(pj::OnCallStateParam &prm) {
+    USPEngine *engine = engine_;
+    if (!engine) return;
+    USPCallEvent *event = snapshotEvent();
+    if (!event) return;
+    if (event.phase == USPCallPhaseDisconnected) {
+        // Hop: erase from registry, emit terminal event, then delete the
+        // C++ object on the engine thread (never inside this callback).
+        int callId = (int)event.callId;
+        USPEngineAsync(engine, ^{
+            auto *core = [engine core];
+            auto found = core->calls.find(callId);
+            if (found != core->calls.end()) {
+                BridgeCall *call = found->second;
+                core->calls.erase(found);
+                core->mutedCalls.erase(callId);
+                USPEmitCall(engine, event, NO);
+                delete call;
+            } else {
+                USPEmitCall(engine, event, NO);
+            }
+        });
+    } else {
+        USPEmitCall(engine, event, NO);
+    }
+}
+
+void BridgeCall::onCallMediaState(pj::OnCallMediaStateParam &prm) {
+    USPEngine *engine = engine_;
+    if (!engine) return;
+    int callId = -1;
+    try {
+        callId = getId();
+    } catch (const pj::Error &) {
+        return;
+    }
+    USPEngineAsync(engine, ^{
+        auto *core = [engine core];
+        auto found = core->calls.find(callId);
+        if (found == core->calls.end()) return;  // already terminal
+        BridgeCall *call = found->second;
+        try {
+            pj::AudioMedia media = call->getAudioMedia(-1);
+            auto &manager = core->endpoint->audDevManager();
+            media.startTransmit(manager.getPlaybackDevMedia());
+            if (core->mutedCalls.count(callId) == 0) {
+                manager.getCaptureDevMedia().startTransmit(media);
+            }
+        } catch (const pj::Error &) {
+            // No active audio stream (hold, or media not audio) — fine.
+        }
+        USPEmitCall(engine, call->snapshotEvent(), NO);
+    });
+}
+
+void BridgeAccount::onIncomingCall(pj::OnIncomingCallParam &iprm) {
+    USPEngine *engine = engine_;
+    if (!engine) return;
+    auto *call = new BridgeCall(*this, engine, true, iprm.callId);
+    int callId = iprm.callId;
+    USPEngineAsync(engine, ^{
+        auto *core = [engine core];
+        USPCallEvent *event = call->snapshotEvent(USPCallPhaseIncoming);
+        if (!event) {
+            // Remote already cancelled before we registered the call.
+            delete call;
+            return;
+        }
+        core->calls[callId] = call;
+        try {
+            pj::CallOpParam prm;
+            prm.statusCode = PJSIP_SC_RINGING;
+            call->answer(prm);
+        } catch (const pj::Error &) {
+        }
+        USPEmitCall(engine, event, YES);
+    });
+}
+
+}  // namespace ultrasip
+
+static void USPEmitReg(USPEngine *engine, USPRegistrationEvent *event) {
+    [engine emitRegistrationEvent:event];
+}
+
+static void USPEmitCall(USPEngine *engine, USPCallEvent *event, BOOL isNewIncoming) {
+    [engine emitCallEvent:event incoming:isNewIncoming];
+}
+
+static void USPEngineAsync(USPEngine *engine, dispatch_block_t block) {
+    [engine onEngine:block];
+}

@@ -1,13 +1,17 @@
-# MacSIP
+# UltraSIP
 
-A free, open-source (GPLv3) native macOS softphone built on PJSIP/PJSUA2,
-aiming for functional parity with MicroSIP for Windows while keeping its
-compact desktop-utility character. macOS 13+, universal (Apple Silicon +
-Intel), Swift + Objective-C++, AppKit/SwiftUI.
+A native macOS softphone from **Ultranet Telecom Ghana Limited**, built on
+PJSIP/PJSUA2 and released under GPLv3. Aims for functional parity with
+MicroSIP for Windows while keeping its compact desktop-utility character.
+macOS 13+, universal (Apple Silicon + Intel), Swift + Objective-C++,
+AppKit/SwiftUI.
+
+Brand palette (`UltraSIP/Shared/Theme/BrandTheme.swift`): Ultranet blue
+`#176FA6` / deep blue `#06619B` / orange `#F2A71B`.
 
 ## ⚠️ Implementation status — read this first
 
-**Milestone 1 core is working: MacSIP makes and receives real SIP calls
+**Milestone 1 core is working: UltraSIP makes and receives real SIP calls
 with real RTP audio** — verified by automated integration tests against a
 real SIP peer (pjsua) over localhost, with RTP packet counters asserted in
 both directions and DTMF delivery confirmed peer-side.
@@ -52,7 +56,7 @@ Xcode 26+ and network access to github.com are enough.
 
 GPLv3 (see [LICENSE](LICENSE)). PJSIP is used under its GPL license;
 third-party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-MacSIP is an independent project, not affiliated with MicroSIP; no MicroSIP
+UltraSIP is an independent project, not affiliated with MicroSIP; no MicroSIP
 assets are used (docs/CLEAN_ROOM_PROCESS.md).
 
 ## Contributing / security

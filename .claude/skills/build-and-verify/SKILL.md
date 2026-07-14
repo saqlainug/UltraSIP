@@ -1,6 +1,6 @@
 ---
 name: build-and-verify
-description: Canonical MacSIP build + verification sequence. Use before claiming any change works, before every commit of implementation code, and at session end. Defines the exact order of clean build, debug/release builds, unit tests, integration tests, static analysis, sanitizers, and honest result reporting.
+description: Canonical UltraSIP build + verification sequence. Use before claiming any change works, before every commit of implementation code, and at session end. Defines the exact order of clean build, debug/release builds, unit tests, integration tests, static analysis, sanitizers, and honest result reporting.
 ---
 
 # Build and verify
@@ -43,12 +43,12 @@ scripts/test.sh
 
 ## Static analysis and sanitizers
 
-- Analyzer: `xcodebuild -project MacSIP.xcodeproj -scheme MacSIP analyze`
+- Analyzer: `xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP analyze`
   (treat new analyzer warnings as failures).
 - Thread Sanitizer (threading bugs in SIPCore are the #1 crash source):
-  `xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -enableThreadSanitizer YES test`
+  `xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -enableThreadSanitizer YES test`
 - Address Sanitizer (Obj-C++ bridge memory safety):
-  `xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -enableAddressSanitizer YES test`
+  `xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -enableAddressSanitizer YES test`
 - Run TSan/ASan at minimum before each milestone completion and after any
   SIPCore/bridge change.
 

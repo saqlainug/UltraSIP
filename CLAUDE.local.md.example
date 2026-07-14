@@ -7,8 +7,8 @@
 ## Signing (user-held; scripts ask before using)
 
 - Developer ID identity: Developer ID Application: YOUR NAME (TEAMID)
-- notarytool keychain profile name: macsip-notary
-  (created once with: xcrun notarytool store-credentials macsip-notary)
+- notarytool keychain profile name: ultrasip-notary
+  (created once with: xcrun notarytool store-credentials ultrasip-notary)
 
 ## Local test environment
 

@@ -7,7 +7,7 @@ repository is derived.
 
 ## Legal basis
 
-- MacSIP is **GPLv3** (LICENSE).
+- UltraSIP is **GPLv3** (LICENSE).
 - MicroSIP's source is **GPL-2.0-or-later** (verified from the official
   3.22.3 source archive headers — see docs/RESEARCH_BASELINE.md §1).
   GPL-2.0-or-later code may legally be studied, and even incorporated, in a
@@ -45,7 +45,7 @@ Every part of the repository falls into one of:
 2. **Observed interaction behavior** — behavior determined by running
    MicroSIP or examining its GPL source. Record observations in feature
    design notes / PARITY_MATRIX.md "MicroSIP reference" column.
-3. **Independently designed implementation** — all MacSIP code unless the
+3. **Independently designed implementation** — all UltraSIP code unless the
    ledger says otherwise. Original work, GPLv3.
 4. **Third-party source** — pjproject + its bundled components
    (DEPENDENCY_LICENSES.md, THIRD_PARTY_NOTICES.md). Never copied into our
@@ -60,6 +60,6 @@ Every part of the repository falls into one of:
 
 Files containing code adapted from MicroSIP's GPL source (empty = none):
 
-| MacSIP file | MicroSIP source file / version | Nature of adaptation | Notice preserved |
+| UltraSIP file | MicroSIP source file / version | Nature of adaptation | Notice preserved |
 |---|---|---|---|
 | — | — | — | — |

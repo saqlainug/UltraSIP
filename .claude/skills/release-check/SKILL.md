@@ -1,6 +1,6 @@
 ---
 name: release-check
-description: Pre-release verification checklist for MacSIP — clean-clone rebuild, universal build, tests, license notices, signing/Hardened Runtime/notarization checks, artifact inspection, secret scan, release notes. Run in full before tagging or distributing any build.
+description: Pre-release verification checklist for UltraSIP — clean-clone rebuild, universal build, tests, license notices, signing/Hardened Runtime/notarization checks, artifact inspection, secret scan, release notes. Run in full before tagging or distributing any build.
 ---
 
 # Release check
@@ -12,7 +12,7 @@ runs without credentials.
 ## 1. Clean-clone test
 
 ```
-git clone <repo> /tmp/macsip-releasecheck && cd /tmp/macsip-releasecheck
+git clone <repo> /tmp/ultrasip-releasecheck && cd /tmp/ultrasip-releasecheck
 scripts/bootstrap.sh
 scripts/build-pjsip.sh
 scripts/build-release.sh
@@ -41,7 +41,7 @@ sanctioned write outside the repo: a throwaway clone in a temp dir.)
 ## 4. Artifact inspection (after sign.sh + package.sh)
 
 ```
-lipo -archs dist-app/MacSIP.app/Contents/MacOS/MacSIP     # arm64 x86_64
+lipo -archs dist-app/UltraSIP.app/Contents/MacOS/UltraSIP     # arm64 x86_64
 codesign --verify --strict --verbose=2 <app>
 codesign -d --entitlements - <app>                        # expected set only
 spctl -a -t exec -vv <app>                                # after notarization

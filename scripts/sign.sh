@@ -14,7 +14,7 @@ assert_repo_root
 require_tool codesign "Ships with Xcode command line tools"
 
 IDENTITY=""
-APP="${REPO_ROOT}/build/DerivedData/Build/Products/Release/MacSIP.app"
+APP="${REPO_ROOT}/build/DerivedData/Build/Products/Release/UltraSIP.app"
 while [[ $# -gt 0 ]]; do
   case "${1}" in
     --identity)
@@ -33,7 +33,7 @@ done
 [[ -d "${APP}" ]] || die "app bundle not found at ${APP}. Run scripts/build-release.sh first."
 [[ "${IDENTITY}" == Developer\ ID\ Application:* ]] || warn "identity does not look like a 'Developer ID Application' certificate; Gatekeeper will reject other types for direct distribution."
 
-ENTITLEMENTS="${REPO_ROOT}/Config/MacSIP.entitlements"
+ENTITLEMENTS="${REPO_ROOT}/Config/UltraSIP.entitlements"
 [[ -f "${ENTITLEMENTS}" ]] || die "entitlements file missing at ${ENTITLEMENTS}"
 
 log "Signing ${APP} with Hardened Runtime..."

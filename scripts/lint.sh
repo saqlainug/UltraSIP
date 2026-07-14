@@ -16,7 +16,7 @@ require_tool swift "Ships with Xcode"
 cd "${REPO_ROOT}"
 swift format --version >/dev/null 2>&1 || die "swift format subcommand unavailable in this toolchain"
 
-SWIFT_DIRS=(MacSIP Tests)
+SWIFT_DIRS=(UltraSIP Tests)
 if [[ "${1:-}" == "--fix" ]]; then
   log "Applying swift format..."
   swift format --in-place --recursive "${SWIFT_DIRS[@]}"

@@ -1,4 +1,4 @@
-# CLAUDE.md — MacSIP
+# CLAUDE.md — UltraSIP
 
 Native, open-source macOS softphone with functional parity to MicroSIP for Windows (stable release), built on PJSIP/PJSUA2. Real SIP/RTP — no mocks, no simulated dialing, no UI-only prototypes.
 
@@ -6,7 +6,7 @@ Native, open-source macOS softphone with functional parity to MicroSIP for Windo
 
 ## Project facts
 
-- Product `MacSIP` · repo `macsip` · bundle id `com.example.macsip` (all configurable via `Config/Project.xcconfig` — never hardcode)
+- Product `UltraSIP` · repo `ultrasip` · bundle id `com.ultranet.ultrasip` (all configurable via `Config/Project.xcconfig` — never hardcode)
 - macOS 13+, universal (arm64 + x86_64), Hardened Runtime, Developer ID distribution (Mac App Store: out of scope unless sandboxing is separately verified)
 - Swift 5.9+ · SIP stack: pinned PJSIP/PJSUA2 release (see `scripts/build-pjsip.sh` for version + SHA-256)
 

@@ -1,6 +1,6 @@
 ---
 name: interoperability-test
-description: Procedure for running MacSIP integration/interoperability tests against the local TestPBX — starting the PBX, provisioning extensions, running SIPp scenarios, verifying media in both directions, and recording results in the interop matrix.
+description: Procedure for running UltraSIP integration/interoperability tests against the local TestPBX — starting the PBX, provisioning extensions, running SIPp scenarios, verifying media in both directions, and recording results in the interop matrix.
 ---
 
 # Interoperability test

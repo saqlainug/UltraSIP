@@ -13,7 +13,7 @@ require_tool xcodebuild "Install Xcode"
 cd "${REPO_ROOT}"
 log "Running unit tests..."
 set +e
-OUTPUT="$(xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug test 2>&1)"
+OUTPUT="$(xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -configuration Debug test 2>&1)"
 STATUS=$?
 set -e
 echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true

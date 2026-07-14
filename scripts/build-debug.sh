@@ -10,7 +10,7 @@ assert_repo_root
 require_tool xcodebuild "Install Xcode"
 
 cd "${REPO_ROOT}"
-log "Building MacSIP (Debug)..."
-xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug build \
+log "Building UltraSIP (Debug)..."
+xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -configuration Debug build \
   | tail -5
 log "Debug build succeeded."

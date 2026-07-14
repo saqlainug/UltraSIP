@@ -1,4 +1,4 @@
-# MacSIP CI — build + unit tests + lint + secret scan on macOS.
+# UltraSIP CI — build + unit tests + lint + secret scan on macOS.
 #
 # Integration tests are deliberately ABSENT: GitHub-hosted macOS runners
 # cannot run Docker, so TestPBX-based tests run locally or on a self-hosted

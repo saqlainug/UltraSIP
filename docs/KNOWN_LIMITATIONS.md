@@ -25,7 +25,7 @@ Updated per release; honest by policy (never imply unimplemented features).
 - Registration, auth-failure detail, and PBX-routed calls with
   bidirectional media are verified against the Asterisk TestPBX
   (docs/INTEROP_TEST_MATRIX.md). Gaps that remain in the matrix:
-  PBX→MacSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
+  PBX→UltraSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
   scenario coverage.
 - Account field set now covers the network-maturity set (transport incl.
   UDP+TCP auto, registration toggle/interval, outbound proxy, keepalive,
@@ -54,7 +54,7 @@ Updated per release; honest by policy (never imply unimplemented features).
   (THREAT_MODEL.md T3); acceptable only because nothing is network-exposed
   yet — must be resolved before Milestone 1 touches untrusted networks.
 - DTLS-SRTP is **permanently out of scope by decision** (2026-07-13): it
-  would require the OpenSSL backend; MacSIP ships SDES-SRTP as its media
+  would require the OpenSSL backend; UltraSIP ships SDES-SRTP as its media
   encryption (docs/PJSIP_INTEGRATION.md).
 - The PJSIP build is audio-only (video disabled) by design until
   Milestone 6.

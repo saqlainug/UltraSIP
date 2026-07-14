@@ -1,4 +1,4 @@
-# MacSIP architecture
+# UltraSIP architecture
 
 Native macOS softphone (macOS 13+, universal arm64+x86_64) on PJSIP/PJSUA2.
 This document records the layered architecture, the threading model, and the
@@ -34,7 +34,7 @@ is replaceable. **PJSIP types never escape SIPCore** — the bridge emits
 immutable Swift event values and accepts value-type commands.
 
 Repository layout follows SPEC (App/, Features/, Domain/, SIPCore/,
-Persistence/, Security/, Platform/, Shared/, Resources/ under `MacSIP/`;
+Persistence/, Security/, Platform/, Shared/, Resources/ under `UltraSIP/`;
 `Tests/`, `IntegrationTests/`, `TestPBX/`, `scripts/`, `docs/`, `Config/`
 at the root). Identity (product name, bundle id, team, versions) lives
 solely in `Config/Project.xcconfig`.

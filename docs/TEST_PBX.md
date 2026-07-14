@@ -9,7 +9,7 @@ SIPp scenarios still pending. Container specifics: RTP range pinned to the
 compose port mapping (rtp.conf), and the UDP transport advertises
 `external_media_address=127.0.0.1` because the PBX lives behind Docker's
 NAT. Docker's UDP proxy drops oversized datagrams — keep SIP requests
-under the RFC 3261 UDP threshold (MacSIP's compact default SDP does).
+under the RFC 3261 UDP threshold (UltraSIP's compact default SDP does).
 
 ## Planned layout
 

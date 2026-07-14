@@ -1,34 +1,34 @@
 // Central project identity and platform pins (SPEC: identity must be
-// configurable, never scattered through source). Values prefixed MACSIP_
+// configurable, never scattered through source). Values prefixed ULTRASIP_
 // are the single source of truth; build settings below map them into Xcode.
 //
 // Do not edit identity values casually — changes to bundle/signing identity
 // are approval-gated (CLAUDE.md gate 3).
 
-MACSIP_PRODUCT_NAME = MacSIP
-MACSIP_BUNDLE_IDENTIFIER = com.example.macsip
-MACSIP_MARKETING_VERSION = 0.1.0
-MACSIP_CURRENT_PROJECT_VERSION = 1
-MACSIP_MACOS_DEPLOYMENT_TARGET = 13.0
+ULTRASIP_PRODUCT_NAME = UltraSIP
+ULTRASIP_BUNDLE_IDENTIFIER = com.ultranet.ultrasip
+ULTRASIP_MARKETING_VERSION = 0.1.0
+ULTRASIP_CURRENT_PROJECT_VERSION = 1
+ULTRASIP_MACOS_DEPLOYMENT_TARGET = 13.0
 
 // Signing: "-" = ad-hoc ("Sign to Run Locally") so contributors and CI can
 // build without credentials. Release signing overrides these via
 // scripts/sign.sh with a Developer ID identity + team held by the user.
-MACSIP_CODE_SIGN_IDENTITY = -
-MACSIP_TEAM_ID =
+ULTRASIP_CODE_SIGN_IDENTITY = -
+ULTRASIP_TEAM_ID =
 
 // Reserved for later milestones (update feed, app group for IPC).
-MACSIP_UPDATE_URL =
-MACSIP_APP_GROUP_ID =
+ULTRASIP_UPDATE_URL =
+ULTRASIP_APP_GROUP_ID =
 
 // --- Mapping into Xcode build settings ---
-MACOSX_DEPLOYMENT_TARGET = $(MACSIP_MACOS_DEPLOYMENT_TARGET)
+MACOSX_DEPLOYMENT_TARGET = $(ULTRASIP_MACOS_DEPLOYMENT_TARGET)
 SDKROOT = macosx
 SUPPORTED_PLATFORMS = macosx
 ARCHS = $(ARCHS_STANDARD)
-MARKETING_VERSION = $(MACSIP_MARKETING_VERSION)
-CURRENT_PROJECT_VERSION = $(MACSIP_CURRENT_PROJECT_VERSION)
+MARKETING_VERSION = $(ULTRASIP_MARKETING_VERSION)
+CURRENT_PROJECT_VERSION = $(ULTRASIP_CURRENT_PROJECT_VERSION)
 CODE_SIGN_STYLE = Manual
-CODE_SIGN_IDENTITY = $(MACSIP_CODE_SIGN_IDENTITY)
-DEVELOPMENT_TEAM = $(MACSIP_TEAM_ID)
+CODE_SIGN_IDENTITY = $(ULTRASIP_CODE_SIGN_IDENTITY)
+DEVELOPMENT_TEAM = $(ULTRASIP_TEAM_ID)
 SWIFT_VERSION = 6.0

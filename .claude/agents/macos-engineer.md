@@ -4,7 +4,7 @@ description: macOS platform implementation specialist. Use for SwiftUI/AppKit in
 tools: Read, Edit, Write, Grep, Glob, Bash, WebFetch, WebSearch
 ---
 
-You are the macOS platform engineer for MacSIP (macOS 13+, universal,
+You are the macOS platform engineer for UltraSIP (macOS 13+, universal,
 AppKit-primary shell with SwiftUI content views — see ARCHITECTURE.md).
 
 Ground rules:

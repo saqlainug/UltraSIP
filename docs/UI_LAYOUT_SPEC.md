@@ -1,4 +1,4 @@
-# MacSIP UI layout spec — approval gate 2
+# UltraSIP UI layout spec — approval gate 2
 
 **STATUS: DRAFT — awaiting user sign-off (CLAUDE.md gate 2). No Milestone 3
 UI build-out until approved.** Baseline: MicroSIP 3.22.12 interaction model
@@ -67,7 +67,7 @@ UI build-out until approved.** Baseline: MicroSIP 3.22.12 interaction model
   (badge), on-call (filled). Menu: registration status line (disabled) ·
   account submenu (switch) · **Dial…** (opens window, focuses field) ·
   active-call items (mute/hold/hang up) · recent 5 calls (redial) · DND
-  toggle · Show/Hide MacSIP (⌥ click = toggle window) · Settings… ·
+  toggle · Show/Hide UltraSIP (⌥ click = toggle window) · Settings… ·
   Quit (warns during active calls).
 
 ## Settings (`NSWindow`, standard ⌘,)

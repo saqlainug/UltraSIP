@@ -37,9 +37,9 @@ The application must perform real:
 
 Use this provisional identity:
 
-* Product name: `MacSIP`
-* Repository name: `macsip`
-* Bundle identifier: `com.example.macsip`
+* Product name: `UltraSIP`
+* Repository name: `ultrasip`
+* Bundle identifier: `com.ultranet.ultrasip`
 * Minimum supported macOS: macOS 13 Ventura
 * Supported CPU architectures:
 
@@ -628,9 +628,9 @@ The bridge must:
 Use a layered architecture similar to:
 
 ```text
-MacSIP/
+UltraSIP/
 ├── App/
-│   ├── MacSIPApp.swift
+│   ├── UltraSIPApp.swift
 │   ├── AppDelegate.swift
 │   ├── AppEnvironment.swift
 │   ├── AppCommands.swift
@@ -1410,7 +1410,7 @@ Support URL schemes:
 * `sip:`
 * `sips:`
 * `tel:`
-* `macsip:`
+* `ultrasip:`
 
 Provide local command or CLI operations:
 
@@ -2070,7 +2070,7 @@ For every feature record:
 
 * Feature
 * MicroSIP reference
-* MacSIP implementation status
+* UltraSIP implementation status
 * Relevant source files
 * Unit-test status
 * Integration-test status

@@ -4,7 +4,7 @@
 # never be reused outside the local TestPBX.
 #
 # The server cert carries SAN IP:127.0.0.1 (Apple's TLS stack requires
-# SANs; CN alone is ignored). MacSIP's cert-validation tests rely on this
+# SANs; CN alone is ignored). UltraSIP's cert-validation tests rely on this
 # CA being UNTRUSTED by the system: verification must fail until the
 # per-account insecure override (or explicit CA install) is used.
 
@@ -23,7 +23,7 @@ mkdir -p "${KEYS}"
 cd "${KEYS}"
 
 openssl req -x509 -newkey rsa:2048 -keyout ca.key -out ca.crt -days 365 -nodes \
-  -subj "/CN=MacSIP TestPBX CA (throwaway)" 2>/dev/null
+  -subj "/CN=UltraSIP TestPBX CA (throwaway)" 2>/dev/null
 
 openssl req -newkey rsa:2048 -keyout asterisk.key -out asterisk.csr -nodes \
   -subj "/CN=127.0.0.1" 2>/dev/null

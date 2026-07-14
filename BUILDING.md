@@ -1,4 +1,4 @@
-# Building MacSIP
+# Building UltraSIP
 
 ## Requirements
 
@@ -13,7 +13,7 @@
 ```
 scripts/bootstrap.sh      # verifies tools; downloads + checksum-verifies PJSIP source
 scripts/build-pjsip.sh    # builds universal static libpjproject.a (arm64 + x86_64)
-scripts/build-debug.sh    # builds MacSIP.app (Debug, ad-hoc signed)
+scripts/build-debug.sh    # builds UltraSIP.app (Debug, ad-hoc signed)
 scripts/test.sh           # runs unit tests (XCTest)
 ```
 

@@ -1,4 +1,4 @@
-# MacSIP TestPBX — local Asterisk for integration tier 2 (registration,
+# UltraSIP TestPBX — local Asterisk for integration tier 2 (registration,
 # auth, voicemail, feature codes). See docs/TEST_PBX.md.
 #
 # STATUS: configuration written but NOT yet executed anywhere — Docker is
@@ -12,7 +12,7 @@
 services:
   asterisk:
     image: andrius/asterisk:alpine-20.5.2
-    container_name: macsip-testpbx
+    container_name: ultrasip-testpbx
     restart: unless-stopped
     # SIP + a narrow RTP range; host networking is unavailable on macOS.
     # Loopback-only: tests target 127.0.0.1, and the throwaway credentials

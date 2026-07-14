@@ -32,7 +32,7 @@ fi
 # own executable, and the peer intermittently never prints "Ready:" (the
 # grant also dies with every host rebuild because the ad-hoc CDHash changes).
 stage_peer_binary() {
-  local staged_dir="${HOME}/Library/Caches/macsip-testpeer"
+  local staged_dir="${HOME}/Library/Caches/ultrasip-testpeer"
   local staged="${staged_dir}/$(basename "${PJSUA_BIN}")"
   mkdir -p "${staged_dir}"
   cp -f "${PJSUA_BIN}" "${staged}"
@@ -47,10 +47,10 @@ if [[ -x "${PJSUA_BIN}" ]]; then
   stage_peer_binary
   cd "${REPO_ROOT}"
   set +e
-  OUTPUT="$(TEST_RUNNER_MACSIP_INTEGRATION=1 TEST_RUNNER_MACSIP_PJSUA="${PJSUA_BIN}" \
-    xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug \
-    -only-testing:MacSIPTests/SIPIntegrationTests \
-    -only-testing:MacSIPTests/BrokenGatewayTests test 2>&1)"
+  OUTPUT="$(TEST_RUNNER_ULTRASIP_INTEGRATION=1 TEST_RUNNER_ULTRASIP_PJSUA="${PJSUA_BIN}" \
+    xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -configuration Debug \
+    -only-testing:UltraSIPTests/SIPIntegrationTests \
+    -only-testing:UltraSIPTests/BrokenGatewayTests test 2>&1)"
   STATUS=$?
   set -e
   echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true
@@ -70,10 +70,10 @@ if command -v docker >/dev/null 2>&1 \
   log "Tier 2: TestPBX integration tests (registration, auth, PBX-routed media)"
   cd "${REPO_ROOT}"
   set +e
-  OUTPUT="$(TEST_RUNNER_MACSIP_PBX=1 \
-    xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Debug \
-    -only-testing:MacSIPTests/PBXIntegrationTests \
-    -only-testing:MacSIPTests/TransportSecurityTests test 2>&1)"
+  OUTPUT="$(TEST_RUNNER_ULTRASIP_PBX=1 \
+    xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -configuration Debug \
+    -only-testing:UltraSIPTests/PBXIntegrationTests \
+    -only-testing:UltraSIPTests/TransportSecurityTests test 2>&1)"
   STATUS=$?
   set -e
   echo "${OUTPUT}" | grep -E "Test Suite|Test Case.*(passed|failed)|TEST (SUCCEEDED|FAILED)" || true

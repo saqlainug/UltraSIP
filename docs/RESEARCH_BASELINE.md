@@ -54,7 +54,7 @@ log since 3.22.5; P-Asserted-Identity on outgoing since 3.22.5.
 
 **Decisions affected:** parity matrix baseline = MicroSIP **3.22.12**;
 migration importer must parse UTF-16LE INI + Contacts.xml (formats verified
-only against 3.22.3 source); call-log import limited to MacSIP's own format
+only against 3.22.3 source); call-log import limited to UltraSIP's own format
 + documented MicroSIP formats (3.22.5+ DB is undocumented); studying
 MicroSIP GPL-2.0-or-later source inside this GPLv3 project is
 license-compatible (one-way).
@@ -74,7 +74,7 @@ license-compatible (one-way).
 | SRTP | SDES-SRTP enabled by default; bundled libsrtp **2.5.0** base (possibly locally patched); keying priority SDES first. | pjproject 2.17 third_party/srtp/CHANGES | CONFIRMED |
 | Built-in codecs (no external libs) | PCMU/PCMA, G.722, GSM FR, iLBC, Speex (all enabled by default); L16 (disabled by default); **G.722.1/G.722.1C bundled but patent/licensing-encumbered** (Polycom/Siren — keep disabled pending legal check). Opus requires external libopus (`--with-opus`). | docs.pjsip.org pjmedia-codec | CONFIRMED |
 | Video on macOS | AVFoundation capture; Metal renderer (since 2.15); H.264 via Apple **VideoToolbox** (since 2.7, `PJMEDIA_HAS_VID_TOOLBOX_CODEC`); VP8/VP9 via `--with-vpx`. | docs.pjsip.org | CONFIRMED (default-enablement of VideoToolbox in plain configure unverified) |
-| **Security advisories** | **Nine GitHub advisories affect ≤ 2.17 with NO patched release as of 2026-07-13** (fixes are master-only commits). Highest relevance: CVE-2026-57161 / GHSA-xc62-j9h2-mp84 (HIGH) — stack overflow parsing Service-Route headers in a REGISTER **response**, i.e. the default PJSUA2 registration path MacSIP will use in Milestone 1. | github.com/pjsip/pjproject/security/advisories | CONFIRMED |
+| **Security advisories** | **Nine GitHub advisories affect ≤ 2.17 with NO patched release as of 2026-07-13** (fixes are master-only commits). Highest relevance: CVE-2026-57161 / GHSA-xc62-j9h2-mp84 (HIGH) — stack overflow parsing Service-Route headers in a REGISTER **response**, i.e. the default PJSUA2 registration path UltraSIP will use in Milestone 1. | github.com/pjsip/pjproject/security/advisories | CONFIRMED |
 
 **Decisions affected:**
 - **Pin = 2.17** (current stable; 14+ security fixes over 2.16; MicroSIP
@@ -139,7 +139,7 @@ threading rule 4.
 | Fact | Value | Source | Verified |
 |---|---|---|---|
 | Mic/camera permission | `NSMicrophoneUsageDescription` + `NSCameraUsageDescription` required (exception without them); `AVCaptureDevice.authorizationStatus/requestAccess`; system prompts on first `AVCaptureDeviceInput` creation; until granted, black frames / silent audio. | developer.apple.com | CONFIRMED |
-| Hardened Runtime entitlements | Non-sandboxed Developer ID app needs `com.apple.security.device.audio-input` + `com.apple.security.device.camera` for mic/camera. (Both present in `Config/MacSIP.entitlements`.) | developer.apple.com entitlements | CONFIRMED |
+| Hardened Runtime entitlements | Non-sandboxed Developer ID app needs `com.apple.security.device.audio-input` + `com.apple.security.device.camera` for mic/camera. (Both present in `Config/UltraSIP.entitlements`.) | developer.apple.com entitlements | CONFIRMED |
 | Contacts | `CNContactStore` + `NSContactsUsageDescription`; limited-access model is iOS-18-only, not native macOS as of today. Add the addressbook entitlement only when the feature ships. | developer.apple.com | CONFIRMED |
 | Notifications | `UNUserNotificationCenter.requestAuthorization`; **works only from a bundled app context** — unit-test hosts/CLI crash (relevant to how we test notification code). | developer.apple.com + DTS | CONFIRMED |
 | Launch at login | **SMAppService.mainApp** (macOS 13+) `register()`/`unregister()`; `SMLoginItemSetEnabled` deprecated at 13.0. Denial returns `kSMErrorLaunchDeniedByUser`. | developer.apple.com/documentation/servicemanagement/smappservice | CONFIRMED |
@@ -158,7 +158,7 @@ threading rule 4.
 | Default actor isolation | SE-0466 (Swift 6.2): per-module default isolation; `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` is the Xcode-26 default for NEW app targets and Apple's recommendation for UI-facing modules. We use MainActor default for the app target, `nonisolated` for the test target (XCTest init override conflict otherwise — hit and fixed in this repo). | SE-0466 + WWDC25 session 268 | CONFIRMED |
 | C++ interop | Swift cannot catch C++ exceptions (fatal at the boundary) and cannot subclass C++ classes / override C++ virtuals — PJSUA2 is consumed by subclassing + throws everywhere → **Obj-C++ bridge is mandatory**, validating the SPEC architecture. | swift.org/documentation/cxx-interop/status | CONFIRMED |
 | Actor thread identity | SE-0392: default actor executors do NOT guarantee stable thread identity (only MainActor is thread-bound). Custom SerialExecutors are viable but degraded on a macOS 13 floor (`DispatchSerialQueue` executor conveniences are macOS 14+; isolation-checking runtime gaps on 13). → **Dedicated self-managed registered thread** for the SIP context. | SE-0392 + SerialExecutor docs | CONFIRMED |
-| Testing | XCTest and Swift Testing coexist in Xcode 26; Swift Testing is Apple's recommendation for new unit tests; XCTest not deprecated. MacSIP currently uses XCTest; adopting Swift Testing for new pure-Swift tests is open. | WWDC26 session 267 | CONFIRMED |
+| Testing | XCTest and Swift Testing coexist in Xcode 26; Swift Testing is Apple's recommendation for new unit tests; XCTest not deprecated. UltraSIP currently uses XCTest; adopting Swift Testing for new pure-Swift tests is open. | WWDC26 session 267 | CONFIRMED |
 | swift-format | Bundled since Swift 6.0 as `swift format`; local version 6.3.0 verified. `scripts/lint.sh` relies on it (no third-party lint dependency). | swiftlang/swift-format + local | CONFIRMED |
 | SPM | Local packages with `platforms: [.macOS(.v13)]` build/test fine on the 26.x toolchain (execution proven on host OS only). | PackageDescription docs + local | CONFIRMED |
 | Swift 6.3 changes | No runtime scheduling/executor behavior changes vs 6.2; compile-time improvements only (region-based isolation maturity, `@c`, module selectors). | swift.org/blog/swift-6.3-released | CONFIRMED |

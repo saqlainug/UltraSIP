@@ -22,21 +22,21 @@ states, events, transitions, error edges, timeout edges, race guards
 (e.g. user hangs up mid-answer). Implementation must match the diagram.
 
 ## 3. Domain model
-Pure Swift in `MacSIP/Domain/` — immutable values, typed errors, no PJSIP
+Pure Swift in `UltraSIP/Domain/` — immutable values, typed errors, no PJSIP
 types, no I/O. Unit-testable without a SIP server.
 
 ## 4. Bridge
-`MacSIP/SIPCore/` Obj-C++ only. Follow the threading rules (CLAUDE.md —
+`UltraSIP/SIPCore/` Obj-C++ only. Follow the threading rules (CLAUDE.md —
 serialized SIP context, pj_thread_register, callbacks → immutable events →
 MainActor). Document ownership per class. Typed errors across the boundary.
 
 ## 5. Persistence (if the feature stores data)
-Repository protocol in Domain, implementation in `MacSIP/Persistence/`.
+Repository protocol in Domain, implementation in `UltraSIP/Persistence/`.
 Schema change ⇒ new append-only migration + migration test. No password
 columns, ever.
 
 ## 6. UI
-Feature view in `MacSIP/Features/<Feature>/`. Compact (SPEC "Minimalist
+Feature view in `UltraSIP/Features/<Feature>/`. Compact (SPEC "Minimalist
 macOS UI"), keyboard-navigable, VoiceOver labels, honest states (no dead
 controls). AppKit-primary shell rules per ARCHITECTURE.md.
 

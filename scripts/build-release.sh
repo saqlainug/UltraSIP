@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # build-release.sh — canonical Release build, universal (arm64 + x86_64).
-# Output: build/Release/MacSIP.app (ad-hoc signed unless sign.sh is run).
+# Output: build/Release/UltraSIP.app (ad-hoc signed unless sign.sh is run).
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,15 +12,15 @@ require_tool xcodebuild "Install Xcode"
 require_tool lipo "Ships with Xcode command line tools"
 
 cd "${REPO_ROOT}"
-log "Building MacSIP (Release, universal)..."
-xcodebuild -project MacSIP.xcodeproj -scheme MacSIP -configuration Release \
+log "Building UltraSIP (Release, universal)..."
+xcodebuild -project UltraSIP.xcodeproj -scheme UltraSIP -configuration Release \
   -derivedDataPath build/DerivedData \
   ONLY_ACTIVE_ARCH=NO ARCHS="arm64 x86_64" \
   build | tail -5
 
-APP="build/DerivedData/Build/Products/Release/MacSIP.app"
+APP="build/DerivedData/Build/Products/Release/UltraSIP.app"
 [[ -d "${APP}" ]] || die "expected app bundle not found at ${APP}"
-BIN="${APP}/Contents/MacOS/MacSIP"
+BIN="${APP}/Contents/MacOS/UltraSIP"
 log "Architectures: $(lipo -archs "${BIN}")"
 lipo -archs "${BIN}" | grep -q "x86_64" || die "release binary is not universal (missing x86_64)"
 lipo -archs "${BIN}" | grep -q "arm64" || die "release binary is not universal (missing arm64)"
