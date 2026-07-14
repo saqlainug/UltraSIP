@@ -63,7 +63,15 @@ final class AppModel: ObservableObject {
         self.secrets = secrets
         engine.onEvent = { [weak self] event in self?.handle(event) }
         do {
-            let stack = try persistence ?? PersistenceStack.open()
+            // The app bundle is the XCTest host, so this initializer runs
+            // during unit tests too — never let a test touch the user's
+            // real database. Tests get a throwaway file.
+            let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            let stack =
+                try persistence
+                ?? PersistenceStack.open(
+                    at: isTesting
+                        ? NSTemporaryDirectory() + "macsip-testhost-\(UUID().uuidString).sqlite" : nil)
             self.persistence = stack
             accounts = try stack.accounts.loadAll()
             if let stored = try stack.settings.value(for: SettingsRepository.Key.activeAccountID),

@@ -5,10 +5,28 @@ import SQLite3
 /// repositories are used from the main actor only; a serial database queue
 /// arrives if/when profiling demands it.
 nonisolated final class Database {
-    enum DatabaseError: Error, Equatable {
+    /// The SQL is retained for logs/tests but deliberately kept OUT of the
+    /// user-facing description — a UI error should read "table accounts
+    /// has no column named x", not dump a 30-line statement.
+    enum DatabaseError: Error, Equatable, LocalizedError {
         case open(String)
         case prepare(String, sql: String)
         case step(String, sql: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .open(let message): "Could not open the database: \(message)"
+            case .prepare(let message, _), .step(let message, _): "Database error: \(message)"
+            }
+        }
+
+        /// Full statement, for logging only.
+        var sql: String? {
+            switch self {
+            case .open: nil
+            case .prepare(_, let sql), .step(_, let sql): sql
+            }
+        }
     }
 
     private var handle: OpaquePointer?

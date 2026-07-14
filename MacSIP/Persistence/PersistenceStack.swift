@@ -21,6 +21,11 @@ nonisolated struct PersistenceStack {
         }
         let db = try Database(path: databasePath)
         try Migrations.migrate(db)
+        // Safety net: migrations key off PRAGMA user_version, which can be
+        // stamped without the matching schema (divergent build lineages,
+        // interrupted upgrades). Repair additively rather than failing
+        // every later write with a raw SQL error.
+        try SchemaGuard.verifyAndRepair(db)
         return PersistenceStack(
             accounts: AccountRepository(db: db), history: HistoryRepository(db: db),
             settings: SettingsRepository(db: db))

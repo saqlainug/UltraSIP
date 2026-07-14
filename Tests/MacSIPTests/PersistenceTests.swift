@@ -87,6 +87,75 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(try repo.loadAll(), [])
     }
 
+    // MARK: Schema guard (corruption handling)
+
+    /// Reproduces the real failure: a database whose user_version claims it
+    /// is fully migrated while the table is missing columns (written by a
+    /// build with divergent migration definitions). Migrations skip it —
+    /// the guard must repair it so writes succeed.
+    func testStaleVersionStampIsRepaired() throws {
+        let stalePath = NSTemporaryDirectory() + "macsip-stale-\(UUID().uuidString).sqlite"
+        defer { try? FileManager.default.removeItem(atPath: stalePath) }
+
+        do {
+            let stale = try Database(path: stalePath)
+            // v1-era accounts table + an orphan column from another lineage.
+            try stale.execute(
+                """
+                CREATE TABLE accounts (
+                    id TEXT PRIMARY KEY, label TEXT NOT NULL DEFAULT '',
+                    domain TEXT NOT NULL, registrar TEXT NOT NULL DEFAULT '',
+                    username TEXT NOT NULL, auth_id TEXT NOT NULL DEFAULT '',
+                    display_name TEXT NOT NULL DEFAULT '', transport TEXT NOT NULL DEFAULT 'udp',
+                    reg_interval INTEGER NOT NULL DEFAULT 0, keychain_ref TEXT NOT NULL,
+                    registration_enabled INTEGER NOT NULL DEFAULT 1,
+                    turn_keychain_ref TEXT NOT NULL DEFAULT ''
+                )
+                """)
+            // Claim it is fully migrated — the bug's signature.
+            try stale.execute("PRAGMA user_version = \(Migrations.latestVersion)")
+        }
+
+        let db = try Database(path: stalePath)
+        try Migrations.migrate(db)  // no-op: stamp says we are current
+        let repairs = try SchemaGuard.verifyAndRepair(db)
+        XCTAssertFalse(repairs.isEmpty, "guard must repair the stale schema")
+
+        // The columns the code needs now exist…
+        let columns = try SchemaGuard.columns(db, table: "accounts")
+        XCTAssertTrue(columns.contains("turn_password_ref"))
+        XCTAssertTrue(columns.contains("dial_prefix"))
+        XCTAssertTrue(columns.contains("session_timer_mode"))
+        // …the orphan column from the other lineage is left alone…
+        XCTAssertTrue(columns.contains("turn_keychain_ref"))
+        // …missing tables were created…
+        XCTAssertTrue(try SchemaGuard.tableExists(db, "app_settings"))
+        XCTAssertTrue(try SchemaGuard.tableExists(db, "call_history"))
+
+        // …and the write that used to fail now succeeds and round-trips.
+        let repo = AccountRepository(db: db)
+        let config = SIPAccountConfig(
+            label: "Repaired", domain: "pbx.example.com", username: "101",
+            keychainPasswordRef: "ref")
+        try repo.save(config)
+        XCTAssertEqual(try repo.loadAll(), [config])
+    }
+
+    func testGuardIsNoOpOnHealthyDatabase() throws {
+        XCTAssertEqual(try SchemaGuard.verifyAndRepair(db), [], "fresh schema needs no repair")
+    }
+
+    /// A SQL failure must not surface the whole statement to the user.
+    func testDatabaseErrorDescriptionOmitsSQL() {
+        let error = Database.DatabaseError.step(
+            "table accounts has no column named turn_password_ref",
+            sql: "INSERT INTO accounts (id, label) VALUES (?, ?)")
+        let description = error.localizedDescription
+        XCTAssertTrue(description.contains("has no column named turn_password_ref"))
+        XCTAssertFalse(description.contains("INSERT INTO"), "user-facing text must not dump SQL")
+        XCTAssertEqual(error.sql, "INSERT INTO accounts (id, label) VALUES (?, ?)", "SQL kept for logs")
+    }
+
     // MARK: Settings
 
     func testSettingsRoundTrip() throws {
