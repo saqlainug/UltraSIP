@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Milestone 1 account form (single account, UDP). Existing passwords are
-/// never displayed back (SPEC §1); leaving the field empty keeps the
-/// stored secret.
+/// Account form (add or edit a specific account). Stored secrets are never
+/// displayed back (SPEC §1); empty password fields keep existing secrets.
 struct AccountFormView: View {
     @ObservedObject var model: AppModel
+    /// nil = create a new account.
+    let editingAccount: SIPAccountConfig?
+    var onCancel: (() -> Void)?
 
     @State private var label = ""
     @State private var domain = ""
@@ -16,8 +18,13 @@ struct AccountFormView: View {
     @State private var transport: SIPAccountConfig.Transport = .udp
     @State private var mediaEncryption: SIPAccountConfig.MediaEncryption = .none
     @State private var tlsVerificationDisabled = false
+    @State private var stunServer = ""
+    @State private var iceEnabled = false
+    @State private var turnServer = ""
+    @State private var turnUsername = ""
+    @State private var turnPassword = ""
 
-    private var isEditing: Bool { model.account != nil }
+    private var isEditing: Bool { editingAccount != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -73,6 +80,23 @@ struct AccountFormView: View {
                 )
             }
 
+            DisclosureGroup("NAT traversal") {
+                Form {
+                    TextField("STUN server", text: $stunServer, prompt: Text("stun.example.com:3478"))
+                    Toggle("Enable ICE", isOn: $iceEnabled)
+                    TextField("TURN server", text: $turnServer, prompt: Text("turn.example.com:3478"))
+                    TextField("TURN username", text: $turnUsername)
+                    SecureField(
+                        "TURN password", text: $turnPassword,
+                        prompt: Text(
+                            isEditing && editingAccount?.turnPasswordRef.isEmpty == false
+                                ? "••••• (unchanged)" : ""))
+                }
+                .formStyle(.columns)
+                .textFieldStyle(.roundedBorder)
+            }
+            .font(.callout)
+
             if let error = model.lastError {
                 Text(error)
                     .font(.caption)
@@ -81,13 +105,13 @@ struct AccountFormView: View {
             }
 
             HStack {
-                if isEditing {
-                    Button("Cancel") { model.showAccountForm = false }
+                if let onCancel {
+                    Button("Cancel", action: onCancel)
                         .keyboardShortcut(.cancelAction)
                 }
                 Spacer()
                 Button(isEditing ? "Save" : "Save & Register") {
-                    var config = model.account ?? SIPAccountConfig()
+                    var config = editingAccount ?? SIPAccountConfig()
                     config.label = label
                     config.domain = domain
                     config.username = username
@@ -97,8 +121,16 @@ struct AccountFormView: View {
                     config.transport = transport
                     config.mediaEncryption = mediaEncryption
                     config.tlsVerificationDisabled = transport == .tls && tlsVerificationDisabled
+                    config.stunServer = stunServer
+                    config.iceEnabled = iceEnabled
+                    config.turnServer = turnServer
+                    config.turnUsername = turnUsername
                     let newPassword = password
-                    Task { await model.saveAccount(config, newPassword: newPassword) }
+                    let newTURNPassword = turnPassword
+                    Task {
+                        await model.saveAccount(
+                            config, newPassword: newPassword, newTURNPassword: newTURNPassword)
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(domain.isEmpty || username.isEmpty || (!isEditing && password.isEmpty))
@@ -106,7 +138,7 @@ struct AccountFormView: View {
         }
         .padding(16)
         .onAppear {
-            guard let account = model.account else { return }
+            guard let account = editingAccount else { return }
             label = account.label
             domain = account.domain
             username = account.username
@@ -116,6 +148,10 @@ struct AccountFormView: View {
             transport = account.transport
             mediaEncryption = account.mediaEncryption
             tlsVerificationDisabled = account.tlsVerificationDisabled
+            stunServer = account.stunServer
+            iceEnabled = account.iceEnabled
+            turnServer = account.turnServer
+            turnUsername = account.turnUsername
         }
     }
 }

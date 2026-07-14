@@ -456,6 +456,11 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
     long interval = config.regIntervalSeconds;
     MSPSRTPPolicy srtpPolicy = config.srtpPolicy;
     BOOL tlsVerifyDisabled = config.tlsVerifyDisabled;
+    std::string stunServer([config.stunServer UTF8String] ?: "");
+    bool iceEnabled = config.iceEnabled;
+    std::string turnServer([config.turnServer UTF8String] ?: "");
+    std::string turnUser([config.turnUsername UTF8String] ?: "");
+    std::string turnPassword([config.turnPassword UTF8String] ?: "");
     BOOL usesTLS = [config.registrarUri containsString:@"transport=tls"]
         || [config.proxyUri containsString:@"transport=tls"];
     [self onEngine:^{
@@ -515,8 +520,28 @@ static NSError *MSPErrorFromPJ(const pj::Error &error) {
             }
             // SDES keys travel in SDP: secure signaling (TLS) is strongly
             // recommended with SRTP but not enforced here — policy is the
-            // user's per SPEC §2 ("controlled secure-media fallback").
+            // user's per SPEC §2 ("controlled secure-media fallback"); the
+            // account form shows a visible warning for SRTP-without-TLS.
             accountConfig.mediaConfig.srtpSecureSignaling = 0;
+            // NAT traversal (SPEC §1 fields). STUN is endpoint-wide in
+            // PJSIP; applied dynamically. TURN/ICE are per-account.
+            if (!stunServer.empty()) {
+                pj::StringVector servers{stunServer};
+                try {
+                    self->_core.endpoint->natUpdateStunServers(servers, false);
+                } catch (const pj::Error &e) {
+                    PJ_LOG(2, ("MSPEngine", "STUN update failed: %s", e.reason.c_str()));
+                }
+            }
+            accountConfig.natConfig.iceEnabled = iceEnabled;
+            if (!turnServer.empty()) {
+                accountConfig.natConfig.turnEnabled = true;
+                accountConfig.natConfig.turnServer = turnServer;
+                accountConfig.natConfig.turnConnType = PJ_TURN_TP_UDP;
+                accountConfig.natConfig.turnUserName = turnUser;
+                accountConfig.natConfig.turnPasswordType = PJ_STUN_PASSWD_PLAIN;
+                accountConfig.natConfig.turnPassword = turnPassword;
+            }
             auto account = std::make_unique<macsip::BridgeAccount>(self);
             account->create(accountConfig, true);
             self->_core.account = std::move(account);

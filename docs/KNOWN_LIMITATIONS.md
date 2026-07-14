@@ -9,11 +9,15 @@ Updated per release; honest by policy (never imply unimplemented features).
   (docs/INTEROP_TEST_MATRIX.md). Gaps that remain in the matrix:
   PBX→MacSIP inbound scenarios, DTMF read-back through the PBX, and SIPp
   scenario coverage.
-- Single account only (multiple accounts + switching = later M2 slice).
-- TLS trusted-CA happy path untested (validation-rejects and override
-  paths are integration-tested; a trusted-CA run needs a CA installed in
-  the system keychain — manual item). UDP+TCP combined mode and IPv6
-  pending. STUN/TURN/ICE and network/sleep-wake recovery pending (M2).
+- Multiple accounts with switch-without-restart work; the per-account
+  field set is still partial (no dial plan/prefix, voicemail number, port
+  overrides, session timers, presence publishing, caller-ID privacy, or
+  custom UA/headers yet — SPEC §1).
+- STUN and TURN are implemented (config + Keychain TURN credential) but
+  UNVERIFIED against real NAT infrastructure; ICE is verified on loopback
+  only. TLS trusted-CA happy path untested (manual item). UDP+TCP
+  combined mode and IPv6 pending. Network/sleep-wake recovery implemented
+  with manual test items pending (TESTING.md).
 - TestPBX Asterisk image lacks res_srtp — PBX-side SRTP blocked until an
   SRTP-capable image passes dependency-review (endpoint config ready).
 - Mic mute is implemented but has no media-level automated assertion yet;

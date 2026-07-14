@@ -102,6 +102,13 @@ typedef NS_ENUM(NSInteger, MSPSRTPPolicy) {
 /// Per-account TLS trust override (default NO = verify). Changing this
 /// recreates the TLS transport; only valid while no calls are active.
 @property(nonatomic) BOOL tlsVerifyDisabled;
+/// NAT traversal. stunServer "host[:port]" (empty = none; applied
+/// endpoint-wide). TURN credential is transient like the SIP password.
+@property(nonatomic, copy) NSString *stunServer;
+@property(nonatomic) BOOL iceEnabled;
+@property(nonatomic, copy) NSString *turnServer;
+@property(nonatomic, copy) NSString *turnUsername;
+@property(nonatomic, copy) NSString *turnPassword;
 @end
 
 NS_ASSUME_NONNULL_END

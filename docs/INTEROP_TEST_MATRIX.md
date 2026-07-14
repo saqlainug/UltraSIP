@@ -23,6 +23,9 @@ Peers/infrastructure vs scenario, as of **2026-07-14**:
 | TLS: trusted-CA happy path | Not applicable | Not tested (needs CA installed in system trust — manual item) | Not tested | Not tested |
 | SDES-SRTP mandatory, encrypted media both ways | **Pass** (tier 1, 2026-07-14; ↔ pjsua --use-srtp=2) | **Blocked** — image lacks res_srtp (488s all SAVP; endpoint 103 config ready for an SRTP-capable image) | Not tested | Not tested |
 | SRTP mandatory vs plain endpoint: no cleartext fallback | Not tested | **Pass** (tier 2, 2026-07-14; 488, never connected) | Not tested | Not tested |
+| Account switch without restart (re-register + call as new identity) | Not applicable | **Pass** (tier 2, 2026-07-14) | Not tested | Not tested |
+| ICE-enabled call, media both ways | Not tested | **Pass** (tier 2, 2026-07-14; ice_support=yes, loopback candidates) | Not tested | Not tested |
+| STUN / TURN against real NAT infra | Not applicable | Not testable locally — needs external STUN/TURN (or a future coturn container) | Not tested | Not tested |
 
 Environment notes: TestPBX runs in Docker (image `andrius/asterisk:
 alpine-20.5.2`); the UDP path through Docker's proxy drops oversized SIP

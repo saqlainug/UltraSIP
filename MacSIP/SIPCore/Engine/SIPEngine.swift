@@ -66,9 +66,11 @@ final class SIPEngine: NSObject {
 
     // MARK: Account
 
-    /// Password is passed transiently (fetched from Keychain by the caller
-    /// immediately before this call) and never retained on the Swift side.
-    func configureAccount(_ config: SIPAccountConfig, password: String) async throws {
+    /// Passwords are passed transiently (fetched from Keychain by the
+    /// caller immediately before this call) and never retained here.
+    func configureAccount(
+        _ config: SIPAccountConfig, password: String, turnPassword: String = ""
+    ) async throws {
         let bridgeConfig = MSPAccountConfig()
         bridgeConfig.aorUri = config.aor
         // Empty registrar = local account, no REGISTER sent (SPEC §1).
@@ -85,6 +87,11 @@ final class SIPEngine: NSObject {
             case .srtpMandatory: .mandatory
             }
         bridgeConfig.tlsVerifyDisabled = config.tlsVerificationDisabled
+        bridgeConfig.stunServer = config.stunServer
+        bridgeConfig.iceEnabled = config.iceEnabled
+        bridgeConfig.turnServer = config.turnServer
+        bridgeConfig.turnUsername = config.turnUsername
+        bridgeConfig.turnPassword = turnPassword
         bridgeConfig.username = config.username
         bridgeConfig.authID = config.authorizationID
         bridgeConfig.password = password

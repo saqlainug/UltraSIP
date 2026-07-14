@@ -32,8 +32,8 @@ struct RootView: View {
                 ProgressView("Starting SIP engine…")
                 Spacer()
             case .running:
-                if model.account == nil || model.showAccountForm {
-                    ScrollView { AccountFormView(model: model) }
+                if model.accounts.isEmpty {
+                    ScrollView { AccountFormView(model: model, editingAccount: nil, onCancel: nil) }
                 } else {
                     mainContent
                 }
@@ -43,6 +43,9 @@ struct RootView: View {
         .task { await model.startEngine() }
         .sheet(isPresented: $showDiagnostics) {
             DiagnosticsView(model: model)
+        }
+        .sheet(isPresented: $model.showAccountForm) {
+            AccountsListView(model: model)
         }
     }
 

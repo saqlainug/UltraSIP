@@ -57,6 +57,11 @@
         _regIntervalSeconds = 0;
         _srtpPolicy = MSPSRTPPolicyDisabled;
         _tlsVerifyDisabled = NO;
+        _stunServer = @"";
+        _iceEnabled = NO;
+        _turnServer = @"";
+        _turnUsername = @"";
+        _turnPassword = @"";
     }
     return self;
 }

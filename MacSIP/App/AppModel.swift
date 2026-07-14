@@ -17,9 +17,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var registrationState: RegistrationState = .unregistered
     @Published private(set) var calls: [CallID: CallSnapshot] = [:]
     @Published private(set) var history: [CallHistoryEntry] = []
-    @Published private(set) var account: SIPAccountConfig?
+    /// All stored accounts; ONE is active at a time (MicroSIP parity).
+    @Published private(set) var accounts: [SIPAccountConfig] = []
+    @Published private(set) var activeAccountID: UUID?
     @Published var lastError: String?
     @Published var showAccountForm = false
+
+    var account: SIPAccountConfig? {
+        guard let activeAccountID else { return nil }
+        return accounts.first { $0.id == activeAccountID }
+    }
 
     private let engine: SIPEngine
     private let secrets: any SecretStore
@@ -49,7 +56,14 @@ final class AppModel: ObservableObject {
         do {
             let stack = try persistence ?? PersistenceStack.open()
             self.persistence = stack
-            account = try stack.accounts.loadAll().first
+            accounts = try stack.accounts.loadAll()
+            if let stored = try stack.settings.value(for: SettingsRepository.Key.activeAccountID),
+                let id = UUID(uuidString: stored), accounts.contains(where: { $0.id == id })
+            {
+                activeAccountID = id
+            } else {
+                activeAccountID = accounts.first?.id
+            }
             history = try stack.history.recent(limit: 50)
         } catch {
             // App remains usable without persistence; state is session-only.
@@ -73,16 +87,28 @@ final class AppModel: ObservableObject {
             engineStatus = .failed(error.localizedDescription)
             return
         }
-        // Re-register the persisted account from the previous session.
-        if let account {
-            do {
-                let password = try secrets.password(forRef: account.keychainPasswordRef) ?? ""
-                try await engine.configureAccount(account, password: password)
-            } catch {
-                lastError = error.localizedDescription
-            }
-        }
+        // Re-register the persisted active account from the last session.
+        await configureEngineForActiveAccount()
         startRecoveryMonitors()
+    }
+
+    /// Fetches secrets transiently and (re)configures the engine for the
+    /// active account; clears the engine account when none is active.
+    private func configureEngineForActiveAccount() async {
+        guard let account else {
+            await engine.removeAccount()
+            registrationState = .unregistered
+            return
+        }
+        do {
+            let password = try secrets.password(forRef: account.keychainPasswordRef) ?? ""
+            let turnPassword =
+                account.turnPasswordRef.isEmpty
+                ? "" : (try secrets.password(forRef: account.turnPasswordRef) ?? "")
+            try await engine.configureAccount(account, password: password, turnPassword: turnPassword)
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     /// Network-change + wake recovery (SPEC M2): debounced path events and
@@ -107,9 +133,11 @@ final class AppModel: ObservableObject {
 
     // MARK: Account
 
-    /// Saves the account. `newPassword` nil/empty = keep the stored secret
-    /// (SPEC §1: existing passwords are never displayed back on edit).
-    func saveAccount(_ config: SIPAccountConfig, newPassword: String?) async {
+    /// Saves an account (new or edited) and makes it active. Empty/nil
+    /// passwords = keep stored secrets (SPEC §1: never displayed back).
+    func saveAccount(_ config: SIPAccountConfig, newPassword: String?, newTURNPassword: String? = nil)
+        async
+    {
         // Reconfiguring tears down the SIP account; the bridge refuses with
         // calls up (F1/F4) — surface the friendly message first.
         guard activeCalls.isEmpty, incomingCalls.isEmpty else {
@@ -125,21 +153,81 @@ final class AppModel: ObservableObject {
         if config.keychainPasswordRef.isEmpty {
             config.keychainPasswordRef = "sip-account-\(config.id.uuidString)"
         }
+        if !config.turnServer.isEmpty, config.turnPasswordRef.isEmpty {
+            config.turnPasswordRef = "turn-cred-\(config.id.uuidString)"
+        }
         do {
             if let newPassword, !newPassword.isEmpty {
                 try secrets.setPassword(newPassword, forRef: config.keychainPasswordRef)
             }
-            // Fetched transiently at configuration time only; not retained.
-            let password = try secrets.password(forRef: config.keychainPasswordRef) ?? ""
-            try await engine.configureAccount(config, password: password)
+            if let newTURNPassword, !newTURNPassword.isEmpty, !config.turnPasswordRef.isEmpty {
+                try secrets.setPassword(newTURNPassword, forRef: config.turnPasswordRef)
+            }
             if let persistence {
                 try persistence.accounts.save(config)
             }
-            account = config
+            if let index = accounts.firstIndex(where: { $0.id == config.id }) {
+                accounts[index] = config
+            } else {
+                accounts.append(config)
+            }
+            setActiveAccount(config.id)
+            await configureEngineForActiveAccount()
             showAccountForm = false
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    /// Switch the active account without restarting (SPEC §1).
+    func switchAccount(to id: UUID) async {
+        guard activeCalls.isEmpty, incomingCalls.isEmpty else {
+            lastError = "End active calls before switching accounts"
+            return
+        }
+        guard accounts.contains(where: { $0.id == id }), id != activeAccountID else { return }
+        setActiveAccount(id)
+        registrationState = .unregistered
+        await configureEngineForActiveAccount()
+    }
+
+    func deleteAccount(id: UUID) async {
+        guard activeCalls.isEmpty, incomingCalls.isEmpty else {
+            lastError = "End active calls before deleting accounts"
+            return
+        }
+        guard let target = accounts.first(where: { $0.id == id }) else { return }
+        do {
+            if let persistence {
+                try persistence.accounts.delete(id: id)
+            }
+            try? secrets.deletePassword(forRef: target.keychainPasswordRef)
+            if !target.turnPasswordRef.isEmpty {
+                try? secrets.deletePassword(forRef: target.turnPasswordRef)
+            }
+            accounts.removeAll { $0.id == id }
+            if activeAccountID == id {
+                setActiveAccount(accounts.first?.id)
+                registrationState = .unregistered
+                await configureEngineForActiveAccount()
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func setActiveAccount(_ id: UUID?) {
+        activeAccountID = id
+        guard let persistence else { return }
+        do {
+            if let id {
+                try persistence.settings.set(id.uuidString, for: SettingsRepository.Key.activeAccountID)
+            } else {
+                try persistence.settings.remove(SettingsRepository.Key.activeAccountID)
+            }
+        } catch {
+            Self.log.error("Persisting active account failed: \(String(describing: error), privacy: .public)")
         }
     }
 

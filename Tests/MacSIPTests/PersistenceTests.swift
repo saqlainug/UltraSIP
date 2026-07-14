@@ -87,6 +87,31 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(try repo.loadAll(), [])
     }
 
+    // MARK: Settings
+
+    func testSettingsRoundTrip() throws {
+        let repo = SettingsRepository(db: db)
+        XCTAssertNil(try repo.value(for: "active_account_id"))
+        try repo.set("abc-123", for: "active_account_id")
+        XCTAssertEqual(try repo.value(for: "active_account_id"), "abc-123")
+        try repo.set("def-456", for: "active_account_id")
+        XCTAssertEqual(try repo.value(for: "active_account_id"), "def-456", "upsert must replace")
+        try repo.remove("active_account_id")
+        XCTAssertNil(try repo.value(for: "active_account_id"))
+    }
+
+    func testAccountNATFieldsRoundTrip() throws {
+        let repo = AccountRepository(db: db)
+        var config = SIPAccountConfig(domain: "pbx.example.com", username: "n1")
+        config.stunServer = "stun.example.com:3478"
+        config.iceEnabled = true
+        config.turnServer = "turn.example.com:3478"
+        config.turnUsername = "turnuser"
+        config.turnPasswordRef = "turn-cred-x"
+        try repo.save(config)
+        XCTAssertEqual(try repo.loadAll(), [config])
+    }
+
     // MARK: History
 
     func testHistoryRoundTripAndOrdering() throws {

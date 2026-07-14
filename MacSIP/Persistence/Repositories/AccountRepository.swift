@@ -21,8 +21,9 @@ nonisolated final class AccountRepository: AccountStoring {
             """
             INSERT INTO accounts (id, label, domain, registrar, username, auth_id,
                 display_name, transport, reg_interval, keychain_ref, registration_enabled,
-                media_encryption, tls_verify_disabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                media_encryption, tls_verify_disabled, stun_server, ice_enabled,
+                turn_server, turn_username, turn_password_ref)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 label = excluded.label, domain = excluded.domain,
                 registrar = excluded.registrar, username = excluded.username,
@@ -31,7 +32,10 @@ nonisolated final class AccountRepository: AccountStoring {
                 keychain_ref = excluded.keychain_ref,
                 registration_enabled = excluded.registration_enabled,
                 media_encryption = excluded.media_encryption,
-                tls_verify_disabled = excluded.tls_verify_disabled
+                tls_verify_disabled = excluded.tls_verify_disabled,
+                stun_server = excluded.stun_server, ice_enabled = excluded.ice_enabled,
+                turn_server = excluded.turn_server, turn_username = excluded.turn_username,
+                turn_password_ref = excluded.turn_password_ref
             """,
             [
                 .text(account.id.uuidString), .text(account.label), .text(account.domain),
@@ -41,6 +45,9 @@ nonisolated final class AccountRepository: AccountStoring {
                 .integer(account.registrationEnabled ? 1 : 0),
                 .text(account.mediaEncryption.rawValue),
                 .integer(account.tlsVerificationDisabled ? 1 : 0),
+                .text(account.stunServer), .integer(account.iceEnabled ? 1 : 0),
+                .text(account.turnServer), .text(account.turnUsername),
+                .text(account.turnPasswordRef),
             ])
     }
 
@@ -63,7 +70,12 @@ nonisolated final class AccountRepository: AccountStoring {
                 registrationEnabled: (row["registration_enabled"]?.intValue ?? 1) == 1,
                 mediaEncryption: SIPAccountConfig.MediaEncryption(
                     rawValue: row["media_encryption"]?.textValue ?? "none") ?? .none,
-                tlsVerificationDisabled: (row["tls_verify_disabled"]?.intValue ?? 0) == 1)
+                tlsVerificationDisabled: (row["tls_verify_disabled"]?.intValue ?? 0) == 1,
+                stunServer: row["stun_server"]?.textValue ?? "",
+                iceEnabled: (row["ice_enabled"]?.intValue ?? 0) == 1,
+                turnServer: row["turn_server"]?.textValue ?? "",
+                turnUsername: row["turn_username"]?.textValue ?? "",
+                turnPasswordRef: row["turn_password_ref"]?.textValue ?? "")
         }
     }
 

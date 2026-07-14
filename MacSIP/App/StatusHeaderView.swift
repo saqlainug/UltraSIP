@@ -25,18 +25,39 @@ struct StatusHeaderView: View {
                 .fill(statusColor)
                 .frame(width: 9, height: 9)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(accountTitle)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                Text(model.registrationState.userFacingDescription)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            // Account selector (SPEC main-window header): quick switch
+            // between stored accounts; management via the gear.
+            Menu {
+                ForEach(model.accounts) { account in
+                    Button {
+                        Task { await model.switchAccount(to: account.id) }
+                    } label: {
+                        HStack {
+                            Text(account.label.isEmpty ? account.aor : account.label)
+                            if account.id == model.activeAccountID {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+                Divider()
+                Button("Manage Accounts…") { model.showAccountForm = true }
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(accountTitle)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                    Text(model.registrationState.userFacingDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
-            .accessibilityElement(children: .combine)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             .accessibilityLabel(
-                "Account \(model.account?.label ?? "none"), \(model.registrationState.userFacingDescription)")
+                "Account \(model.account?.label ?? "none"), \(model.registrationState.userFacingDescription). Switch account"
+            )
             Spacer()
             Button {
                 model.refreshRegistration()

@@ -117,6 +117,66 @@ final class TransportSecurityTests: XCTestCase {
         guard case .registered = state else { return XCTFail("expected registered, got \(state)") }
     }
 
+    // MARK: Multiple accounts (SPEC §1: switch without restart)
+
+    /// Reconfiguring to a different account on the RUNNING engine must
+    /// re-register as the new identity — no engine restart involved.
+    func testAccountSwitchWithoutRestart() async throws {
+        try await configure(user: "101", password: "test101pw", transport: .udp)  // secretscan:allow throwaway TestPBX cred
+        _ = try await waitForRegistration(timeout: 15) {
+            if case .registered = $0 { return true }
+            return false
+        }
+
+        registrations.removeAll()
+        try await configure(user: "102", password: "test102pw", transport: .udp)  // secretscan:allow throwaway TestPBX cred
+        let state = try await waitForRegistration(timeout: 15) {
+            if case .registered = $0 { return true }
+            return false
+        }
+        guard case .registered = state else { return XCTFail("expected re-registration as 102") }
+
+        // The switched account must be the one making calls now: 102 can
+        // reach the echo extension.
+        let id = try await engine.makeCall(to: "sip:600@\(Self.pbxHost)")
+        _ = try await waitForUpdate(timeout: 15) {
+            $0.id == id && $0.phase == .connected(HoldState.none)
+        }
+        engine.hangup(id)
+        _ = try await waitForUpdate(timeout: 8) {
+            if case .disconnected = $0.phase { return $0.id == id }
+            return false
+        }
+    }
+
+    // MARK: ICE
+
+    /// ICE-enabled call against the PBX's ice_support endpoint: candidates
+    /// negotiate over loopback and media must still flow both ways.
+    func testICECallWithMedia() async throws {
+        try await engine.configureAccount(
+            SIPAccountConfig(
+                label: "ice", domain: Self.pbxHost, username: "102", iceEnabled: true),
+            password: "test102pw")  // secretscan:allow throwaway TestPBX cred
+        _ = try await waitForRegistration(timeout: 15) {
+            if case .registered = $0 { return true }
+            return false
+        }
+        let id = try await engine.makeCall(to: "sip:600@\(Self.pbxHost)")
+        _ = try await waitForUpdate(timeout: 20) {
+            $0.id == id && $0.phase == .connected(HoldState.none)
+        }
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        let stats = await engine.rtpStats(for: id)
+        XCTAssertGreaterThan(stats.tx, 20, "expected RTP out via ICE path, got \(stats.tx)")
+        XCTAssertGreaterThan(stats.rx, 20, "expected echoed RTP via ICE path, got \(stats.rx)")
+        engine.hangup(id)
+        _ = try await waitForUpdate(timeout: 8) {
+            if case .disconnected = $0.phase { return $0.id == id }
+            return false
+        }
+    }
+
     // MARK: SRTP (SDES)
     // The positive SRTP case (mandatory ↔ SRTP peer, media verified) lives
     // in SIPIntegrationTests.testSRTPMandatoryCallWithSRTPPeer — the
