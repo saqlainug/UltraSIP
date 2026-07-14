@@ -25,11 +25,26 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
   PJSUA_BIN="${REPO_ROOT}/ThirdParty/pjsip/src-x86_64/pjsip-apps/bin/pjsua-x86_64-apple-darwin"
 fi
 
+# Stage the peer binary OUTSIDE TCC-protected folders. When the repo lives
+# under ~/Documents (or Desktop/Downloads), macOS blocks the ad-hoc-signed
+# test host's child from exec'ing a binary there: the headless run can never
+# show the folder-access prompt, the child stalls inside dyld's open() of its
+# own executable, and the peer intermittently never prints "Ready:" (the
+# grant also dies with every host rebuild because the ad-hoc CDHash changes).
+stage_peer_binary() {
+  local staged_dir="${HOME}/Library/Caches/macsip-testpeer"
+  local staged="${staged_dir}/$(basename "${PJSUA_BIN}")"
+  mkdir -p "${staged_dir}"
+  cp -f "${PJSUA_BIN}" "${staged}"
+  PJSUA_BIN="${staged}"
+}
+
 RAN_ANY=0
 
 # ---- Tier 1: local loop -----------------------------------------------------
 if [[ -x "${PJSUA_BIN}" ]]; then
   log "Tier 1: local-loop integration tests (real SIP/RTP via pjsua peer)"
+  stage_peer_binary
   cd "${REPO_ROOT}"
   set +e
   OUTPUT="$(TEST_RUNNER_MACSIP_INTEGRATION=1 TEST_RUNNER_MACSIP_PJSUA="${PJSUA_BIN}" \
